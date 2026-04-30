@@ -1,7 +1,14 @@
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
+defineProps({
+  isOpen: {
+    type: Boolean,
+    required: true
+  }
+})
 
 const emit = defineEmits([
+  'toggle-menu',
+  'close-menu',
   'create',
   'open',
   'open-folder',
@@ -11,8 +18,6 @@ const emit = defineEmits([
   'export',
   'settings'
 ])
-const isOpen = ref(false)
-const menuRef = ref(null)
 
 const menuGroups = [
   [
@@ -28,41 +33,22 @@ const menuGroups = [
 ]
 
 function toggleMenu() {
-  isOpen.value = !isOpen.value
+  emit('toggle-menu')
 }
 
 function runMenuAction(eventName) {
   emit(eventName)
-  isOpen.value = false
+  emit('close-menu')
 }
 
 function runExport(format) {
   emit('export', format)
-  isOpen.value = false
+  emit('close-menu')
 }
-
-function handlePointerDown(event) {
-  if (!isOpen.value || menuRef.value?.contains(event.target)) return
-  isOpen.value = false
-}
-
-function handleKeydown(event) {
-  if (event.key === 'Escape') isOpen.value = false
-}
-
-onMounted(() => {
-  window.addEventListener('pointerdown', handlePointerDown)
-  window.addEventListener('keydown', handleKeydown)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('pointerdown', handlePointerDown)
-  window.removeEventListener('keydown', handleKeydown)
-})
 </script>
 
 <template>
-  <div ref="menuRef" class="popup-menu-wrap">
+  <div class="popup-menu-wrap">
     <button
       class="menu-button menu-bar-button"
       type="button"

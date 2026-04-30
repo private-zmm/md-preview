@@ -1,10 +1,8 @@
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import '@highlightjs/cdn-assets/styles/github.min.css'
-import './styles.css'
 import TopBar from './components/TopBar.vue'
-import EditorPane from './components/EditorPane.vue'
-import PreviewPane from './components/PreviewPane.vue'
+import VditorEditorPane from './components/VditorEditorPane.vue'
 import StatusBar from './components/StatusBar.vue'
 import StartupError from './components/StartupError.vue'
 import FileSidebar from './components/FileSidebar.vue'
@@ -59,7 +57,6 @@ const isSettingsOpen = ref(false)
 const notification = ref(null)
 const editorSessionKey = ref(0)
 const editorPaneRef = ref(null)
-const previewPaneRef = ref(null)
 const inputDialogInputRef = ref(null)
 const inputDialog = ref({
   title: '',
@@ -71,9 +68,7 @@ const pendingInsertedImages = ref([])
 const { isDirty, title, wordCount, setDocument, markSaved } = useDocumentState(state)
 const { html, render } = hasDesktopApi ? useMarkdownRenderer(api) : { html: ref(''), render: async () => {} }
 
-const workspaceClass = computed(
-  () => `workspace ${state.view}-view ${folderName.value ? 'has-sidebar' : ''}`
-)
+const workspaceClass = computed(() => `workspace ${folderName.value ? 'has-sidebar' : ''}`)
 const assetBasePath = computed(() => state.filePath || folderPath.value || null)
 const currentOutline = computed(() => {
   let headingIndex = 0
@@ -286,10 +281,6 @@ function loadDocument(documentState) {
   editorSessionKey.value += 1
 }
 
-function setView(view) {
-  state.view = view
-}
-
 function setTheme(theme) {
   state.theme = normalizeTheme(theme)
   document.documentElement.dataset.theme = state.theme
@@ -301,13 +292,7 @@ function runEditorCommand(command) {
 }
 
 function handleOutlineSelect(item) {
-  if (state.view !== 'source') {
-    previewPaneRef.value?.scrollToOutline(item)
-  }
-
-  if (state.view !== 'preview') {
-    editorPaneRef.value?.scrollToLine(item.lineIndex)
-  }
+  editorPaneRef.value?.scrollToOutline(item)
 }
 
 function registerPendingImage(image) {
@@ -727,16 +712,18 @@ async function openRemoteFolder() {
 
 async function saveFile() {
   try {
+    const contentToSave = editorPaneRef.value?.getValue?.() ?? state.content
+    state.content = contentToSave
     const result = state.filePath?.startsWith('webdav://')
       ? await api.saveRemoteMarkdownFile(
           toSerializable(getRemoteSyncSettings()),
           state.filePath,
-          state.content
+          contentToSave
         )
-      : await api.saveMarkdownFile(state.filePath, state.content, folderPath.value || null)
+      : await api.saveMarkdownFile(state.filePath, contentToSave, folderPath.value || null)
     if (result?.canceled) return false
 
-    markSaved(result)
+    markSaved(result, contentToSave)
     confirmPendingImages()
     upsertFolderFile(result.file)
     updateActiveFolderFileSummary()
@@ -752,10 +739,12 @@ async function saveFile() {
 
 async function saveFileAs() {
   try {
-    const result = await api.saveMarkdownFileAs(state.content, folderPath.value || null)
+    const contentToSave = editorPaneRef.value?.getValue?.() ?? state.content
+    state.content = contentToSave
+    const result = await api.saveMarkdownFileAs(contentToSave, folderPath.value || null)
     if (result?.canceled) return false
 
-    markSaved(result)
+    markSaved(result, contentToSave)
     confirmPendingImages()
     upsertFolderFile(result.file)
     updateActiveFolderFileSummary()
@@ -844,7 +833,6 @@ watch(isDirty, (dirty) => api?.setDocumentEdited(dirty), { immediate: true })
   <main v-else class="shell">
     <TopBar
       :is-dirty="isDirty"
-      :view="state.view"
       :theme="state.theme"
       @create="createFile"
       @open="openFile"
@@ -856,7 +844,6 @@ watch(isDirty, (dirty) => api?.setDocumentEdited(dirty), { immediate: true })
       @settings="isSettingsOpen = true"
       @paragraph-command="runEditorCommand"
       @format-command="runEditorCommand"
-      @update:view="setView"
       @update:theme="setTheme"
     />
 
@@ -882,7 +869,7 @@ watch(isDirty, (dirty) => api?.setDocumentEdited(dirty), { immediate: true })
         @folder-action="handleFolderAction"
         @select-outline="handleOutlineSelect"
       />
-      <EditorPane
+      <VditorEditorPane
         ref="editorPaneRef"
         v-model="state.content"
         :history-key="editorSessionKey"
@@ -890,10 +877,10 @@ watch(isDirty, (dirty) => api?.setDocumentEdited(dirty), { immediate: true })
         :default-folder-path="folderPath"
         :image-save-path="activeImageConfig.imageSavePath"
         :sync-settings="activeImageConfig.syncSettings"
+        :theme="state.theme"
         @status="setStatus"
         @image-inserted="registerPendingImage"
       />
-      <PreviewPane ref="previewPaneRef" :html="html" @status="handleSettingsStatus" />
     </section>
 
     <StatusBar :status="statusText" :stats="wordCount" />

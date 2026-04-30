@@ -1,9 +1,12 @@
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
+defineProps({
+  isOpen: {
+    type: Boolean,
+    required: true
+  }
+})
 
-const emit = defineEmits(['command'])
-const isOpen = ref(false)
-const menuRef = ref(null)
+const emit = defineEmits(['command', 'toggle-menu', 'close-menu'])
 
 const menuGroups = [
   [
@@ -21,36 +24,17 @@ const menuGroups = [
 ]
 
 function toggleMenu() {
-  isOpen.value = !isOpen.value
+  emit('toggle-menu')
 }
 
 function runCommand(command) {
   emit('command', command)
-  isOpen.value = false
+  emit('close-menu')
 }
-
-function handlePointerDown(event) {
-  if (!isOpen.value || menuRef.value?.contains(event.target)) return
-  isOpen.value = false
-}
-
-function handleKeydown(event) {
-  if (event.key === 'Escape') isOpen.value = false
-}
-
-onMounted(() => {
-  window.addEventListener('pointerdown', handlePointerDown)
-  window.addEventListener('keydown', handleKeydown)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('pointerdown', handlePointerDown)
-  window.removeEventListener('keydown', handleKeydown)
-})
 </script>
 
 <template>
-  <div ref="menuRef" class="popup-menu-wrap">
+  <div class="popup-menu-wrap">
     <button
       class="menu-button menu-bar-button"
       type="button"

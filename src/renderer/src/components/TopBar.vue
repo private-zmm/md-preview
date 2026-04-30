@@ -1,4 +1,5 @@
 <script setup>
+import { onMounted, onUnmounted, ref } from 'vue'
 import FileMenu from './FileMenu.vue'
 import ParagraphMenu from './ParagraphMenu.vue'
 import FormatMenu from './FormatMenu.vue'
@@ -7,10 +8,6 @@ import ThemeMenu from './ThemeMenu.vue'
 defineProps({
   isDirty: {
     type: Boolean,
-    required: true
-  },
-  view: {
-    type: String,
     required: true
   },
   theme: {
@@ -30,15 +27,47 @@ const emit = defineEmits([
   'settings',
   'paragraph-command',
   'format-command',
-  'update:view',
   'update:theme'
 ])
+
+const activeMenu = ref(null)
+const menuActionsRef = ref(null)
+
+function toggleMenu(menuName) {
+  activeMenu.value = activeMenu.value === menuName ? null : menuName
+}
+
+function closeMenus() {
+  activeMenu.value = null
+}
+
+function handleWindowPointerDown(event) {
+  if (menuActionsRef.value?.contains(event.target)) return
+  closeMenus()
+}
+
+function handleWindowKeydown(event) {
+  if (event.key === 'Escape') closeMenus()
+}
+
+onMounted(() => {
+  window.addEventListener('pointerdown', handleWindowPointerDown)
+  window.addEventListener('keydown', handleWindowKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('pointerdown', handleWindowPointerDown)
+  window.removeEventListener('keydown', handleWindowKeydown)
+})
 </script>
 
 <template>
   <header class="topbar">
-    <nav class="menu-actions" aria-label="应用菜单">
+    <nav ref="menuActionsRef" class="menu-actions" aria-label="应用菜单">
       <FileMenu
+        :is-open="activeMenu === 'file'"
+        @toggle-menu="toggleMenu('file')"
+        @close-menu="closeMenus"
         @create="emit('create')"
         @open="emit('open')"
         @open-folder="emit('open-folder')"
@@ -48,25 +77,28 @@ const emit = defineEmits([
         @export="emit('export', $event)"
         @settings="emit('settings')"
       />
-      <ParagraphMenu @command="emit('paragraph-command', $event)" />
-      <FormatMenu @command="emit('format-command', $event)" />
-      <ThemeMenu :theme="theme" @update:theme="emit('update:theme', $event)" />
+      <ParagraphMenu
+        :is-open="activeMenu === 'paragraph'"
+        @toggle-menu="toggleMenu('paragraph')"
+        @close-menu="closeMenus"
+        @command="emit('paragraph-command', $event)"
+      />
+      <FormatMenu
+        :is-open="activeMenu === 'format'"
+        @toggle-menu="toggleMenu('format')"
+        @close-menu="closeMenus"
+        @command="emit('format-command', $event)"
+      />
+      <ThemeMenu
+        :is-open="activeMenu === 'theme'"
+        :theme="theme"
+        @toggle-menu="toggleMenu('theme')"
+        @close-menu="closeMenus"
+        @update:theme="emit('update:theme', $event)"
+      />
       <span class="dirty-dot" :class="{ 'is-visible': isDirty }" aria-hidden="true"></span>
     </nav>
 
-    <nav class="actions" aria-label="视图操作">
-      <div class="segmented" role="group" aria-label="视图切换">
-        <button
-          v-for="viewMode in ['source', 'split', 'preview']"
-          :key="viewMode"
-          class="segment"
-          :class="{ active: view === viewMode }"
-          type="button"
-          @click="emit('update:view', viewMode)"
-        >
-          {{ { source: '源码', split: '分屏', preview: '预览' }[viewMode] }}
-        </button>
-      </div>
-    </nav>
+    <nav class="actions" aria-label="窗口操作"></nav>
   </header>
 </template>

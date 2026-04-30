@@ -8,7 +8,6 @@ export function createInitialDocumentState() {
     fileName: 'Untitled.md',
     content: sampleDocument,
     savedContent: sampleDocument,
-    view: 'preview',
     theme: normalizeTheme(localStorage.getItem('mdpreview-theme'))
   })
 }
@@ -25,10 +24,10 @@ export function useDocumentState(state) {
     state.savedContent = state.content
   }
 
-  function markSaved(fileState) {
+  function markSaved(fileState, savedContent = state.content) {
     state.filePath = fileState.filePath
     state.fileName = fileState.fileName
-    state.savedContent = state.content
+    state.savedContent = savedContent
   }
 
   return {

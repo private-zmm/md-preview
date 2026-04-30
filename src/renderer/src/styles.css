@@ -196,6 +196,7 @@ button {
   justify-content: space-between;
   gap: 16px;
   padding: 0 12px;
+  height: 34px;
   border-bottom: 1px solid var(--border);
   background: var(--bar-bg);
   -webkit-app-region: drag;
@@ -516,24 +517,11 @@ button {
   color: var(--accent-strong);
 }
 
-.split-view {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-}
-
-.source-view {
+.workspace {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.preview-view {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.has-sidebar.split-view {
-  grid-template-columns: 276px minmax(0, 1fr) minmax(0, 1fr);
-}
-
-.has-sidebar.source-view,
-.has-sidebar.preview-view {
+.workspace.has-sidebar {
   grid-template-columns: 276px minmax(0, 1fr);
 }
 
@@ -554,15 +542,6 @@ button {
   position: relative;
   background: var(--preview-bg);
   border-left: 1px solid var(--border);
-}
-
-.source-view .preview-pane,
-.preview-view .editor-pane {
-  display: none;
-}
-
-.preview-view .preview-pane {
-  border-left: 0;
 }
 
 .file-sidebar {
@@ -786,6 +765,122 @@ button {
 .editor-pane textarea::selection,
 .markdown-body ::selection {
   background: var(--selection);
+}
+
+.vditor-editor-pane {
+  display: block;
+  background: var(--editor-bg);
+}
+
+.vditor-editor {
+  height: 100%;
+}
+
+.vditor-editor .vditor {
+  position: relative;
+  z-index: 1;
+  height: 100% !important;
+  border: 0;
+  background: transparent;
+  --panel-background-color: var(--editor-bg);
+  --textarea-background-color: var(--editor-bg);
+  --textarea-text-color: var(--text);
+  --border-color: var(--border);
+  --second-color: var(--soft);
+  --toolbar-icon-color: var(--muted);
+  --toolbar-icon-hover-color: var(--text);
+  --toolbar-background-color: var(--bar-bg);
+}
+
+.vditor-editor .vditor--fullscreen,
+.vditor-editor .vditor-img,
+.vditor-editor .vditor-hint,
+.vditor-editor .vditor-panel {
+  z-index: 20;
+}
+
+.vditor-editor .vditor-toolbar,
+.vditor-editor .vditor-resize,
+.vditor-editor .vditor-counter {
+  display: none !important;
+}
+
+.vditor-editor .vditor-content {
+  height: 100%;
+  background: transparent;
+}
+
+.vditor-editor .vditor-ir,
+.vditor-editor .vditor-wysiwyg,
+.vditor-editor .vditor-sv {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: auto;
+  background: transparent !important;
+}
+
+.vditor-editor .vditor-ir pre.vditor-reset,
+.vditor-editor .vditor-wysiwyg pre.vditor-reset,
+.vditor-editor .vditor-reset {
+  width: min(100%, var(--document-width));
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 42px 54px 72px !important;
+  background: transparent !important;
+  color: var(--text);
+  font-family: var(--preview-font);
+  font-size: var(--preview-size);
+  line-height: var(--preview-line);
+  overflow-wrap: anywhere;
+}
+
+.vditor-editor .vditor-ir pre.vditor-reset:focus,
+.vditor-editor .vditor-wysiwyg pre.vditor-reset:focus {
+  outline: none;
+}
+
+.vditor-editor .vditor-reset h1,
+.vditor-editor .vditor-reset h2,
+.vditor-editor .vditor-reset h3,
+.vditor-editor .vditor-reset h4,
+.vditor-editor .vditor-reset h5,
+.vditor-editor .vditor-reset h6 {
+  color: var(--heading);
+  font-weight: 600;
+}
+
+.vditor-editor .vditor-reset h1 {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 30px;
+}
+
+.vditor-editor .vditor-reset h2 {
+  font-size: 23px;
+}
+
+.vditor-editor .vditor-reset h3 {
+  font-size: 19px;
+}
+
+.vditor-editor .vditor-reset code:not(.hljs) {
+  background: var(--code-bg);
+  color: var(--accent-strong);
+}
+
+.vditor-editor .vditor-reset table {
+  width: 100%;
+}
+
+.vditor-editor .vditor-reset th,
+.vditor-editor .vditor-reset td {
+  border-color: var(--border-strong);
+}
+
+.vditor-editor .vditor-reset img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
 }
 
 .markdown-body {
@@ -1407,14 +1502,7 @@ button {
     overflow-x: auto;
   }
 
-  .split-view {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
-  }
-
-  .has-sidebar.split-view,
-  .has-sidebar.source-view,
-  .has-sidebar.preview-view {
+  .workspace.has-sidebar {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 260px minmax(0, 1fr);
   }
