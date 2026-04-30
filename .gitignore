@@ -8,3 +8,7 @@ auto-*.d.ts
 .idea
 .history
 .vscode
+release
+out
+images
+
