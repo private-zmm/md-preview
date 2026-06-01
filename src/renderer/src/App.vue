@@ -68,7 +68,8 @@ const pendingInsertedImages = ref([])
 const { isDirty, title, wordCount, setDocument, markSaved } = useDocumentState(state)
 const { html, render } = hasDesktopApi ? useMarkdownRenderer(api) : { html: ref(''), render: async () => {} }
 
-const workspaceClass = computed(() => `workspace ${folderName.value ? 'has-sidebar' : ''}`)
+const hasSidebar = computed(() => Boolean(folderName.value || currentOutline.value.length > 0))
+const workspaceClass = computed(() => `workspace ${hasSidebar.value ? 'has-sidebar' : ''}`)
 const assetBasePath = computed(() => state.filePath || folderPath.value || null)
 const currentOutline = computed(() => {
   let headingIndex = 0
@@ -859,11 +860,12 @@ watch(isDirty, (dirty) => api?.setDocumentEdited(dirty), { immediate: true })
 
     <section v-else :class="workspaceClass">
       <FileSidebar
-        v-if="folderName"
+        v-if="hasSidebar"
         :folder-name="folderName"
         :files="folderFiles"
         :outline="currentOutline"
         :active-file-path="state.filePath"
+        :show-files="Boolean(folderName)"
         @create-file="createFile"
         @open-file="openFile"
         @folder-action="handleFolderAction"

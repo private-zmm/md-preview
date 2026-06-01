@@ -19,9 +19,33 @@ function isMarkdownFile(filePath) {
 function getFileFromArgv(argv) {
   return argv.find((arg) => {
     if (!arg || arg.startsWith('-')) return false
-    const normalized = path.resolve(arg)
-    return isMarkdownFile(normalized)
+
+    const normalized = normalizeFilePathArg(arg)
+    return normalized && isMarkdownFile(normalized)
   })
+}
+
+function normalizeFilePathArg(arg) {
+  const value = String(arg || '').trim().replace(/^"|"$/g, '')
+  if (!value || value.startsWith('-')) return null
+
+  try {
+    if (value.startsWith('file:')) return fileURLToPath(value)
+  } catch {
+    return null
+  }
+
+  return path.resolve(value)
+}
+
+function queueSystemFileOpen(filePath) {
+  if (!filePath) return
+
+  const normalized = path.resolve(filePath)
+  initialFilePath = normalized
+
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isLoading()) return
+  mainWindow.webContents.send('document:open-from-system', normalized)
 }
 
 function stripMarkdown(value) {
@@ -1443,7 +1467,10 @@ async function testSyncConnection({ provider, settings }) {
 
 ipcMain.handle('document:get-initial-file', async () => {
   if (!initialFilePath) return null
-  return openMarkdownFile(initialFilePath)
+
+  const filePath = initialFilePath
+  initialFilePath = null
+  return openMarkdownFile(filePath)
 })
 
 ipcMain.handle('document:open', (_event, filePath) => openMarkdownFile(filePath))
@@ -1532,11 +1559,7 @@ if (!gotLock) {
   app.quit()
 } else {
   app.on('second-instance', (_event, argv) => {
-    const filePath = getFileFromArgv(argv)
-
-    if (filePath && mainWindow) {
-      mainWindow.webContents.send('document:open-from-system', path.resolve(filePath))
-    }
+    queueSystemFileOpen(getFileFromArgv(argv))
 
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore()
@@ -1547,6 +1570,11 @@ if (!gotLock) {
   app.whenReady().then(() => {
     initialFilePath = getFileFromArgv(process.argv)
     createWindow()
+
+    app.on('open-file', (event, filePath) => {
+      event.preventDefault()
+      queueSystemFileOpen(filePath)
+    })
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

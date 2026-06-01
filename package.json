@@ -1,6 +1,6 @@
 {
   "name": "mdpreview",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A quiet Windows desktop Markdown editor inspired by Typora.",
   "main": "out/main/index.js",
   "author": "MdPreview",
@@ -9,8 +9,10 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "dist": "npm run dist:zip",
+    "dist": "npm run dist:installer",
     "dist:dir": "npm run build && electron-builder --win --dir",
+    "dist:installer": "npm run build && electron-builder --win nsis",
+    "dist:portable": "npm run build && electron-builder --win portable",
     "dist:zip": "npm run build && electron-builder --win zip",
     "preview": "electron-vite preview"
   },
@@ -43,10 +45,24 @@
       "signAndEditExecutable": false,
       "target": [
         "nsis",
-        "portable"
+        "portable",
+        "zip"
       ],
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
+    "fileAssociations": [
+      {
+        "ext": [
+          "md",
+          "markdown",
+          "mdown",
+          "mkd"
+        ],
+        "name": "Markdown Document",
+        "description": "Markdown document",
+        "role": "Editor"
+      }
+    ],
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,

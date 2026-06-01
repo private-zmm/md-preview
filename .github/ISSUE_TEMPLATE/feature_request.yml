@@ -1,0 +1,55 @@
+---
+name: Feature request
+description: Suggest an improvement for MdPreview
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请优先描述用户场景，而不是直接描述某个实现方案。
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: 这个需求解决什么实际问题？
+      placeholder: "当我维护本地 Markdown 文档时，我希望..."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: 你期望 MdPreview 怎么表现？
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: 有没有替代方案或临时 workaround？
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Windows file association
+        - Editor experience
+        - Markdown rendering
+        - Folder and outline
+        - Export
+        - Packaging and release
+        - Security boundary
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: This request fits a local/offline Markdown editor.
+          required: true
+        - label: I have searched existing issues.
+          required: true

@@ -1,14 +1,14 @@
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
-defineProps({
+const props = defineProps({
   folderName: {
     type: String,
-    required: true
+    default: ''
   },
   files: {
     type: Array,
-    required: true
+    default: () => []
   },
   outline: {
     type: Array,
@@ -17,11 +17,17 @@ defineProps({
   activeFilePath: {
     type: String,
     default: null
+  },
+  showFiles: {
+    type: Boolean,
+    default: true
   }
 })
 
 const emit = defineEmits(['create-file', 'open-file', 'folder-action', 'select-outline'])
-const activeTab = ref('files')
+const activeTab = ref(props.showFiles ? 'files' : 'outline')
+const sidebarLabel = computed(() => (props.showFiles ? 'Markdown 文件夹' : 'Markdown 大纲'))
+const footerName = computed(() => props.folderName || '当前文件')
 const contextMenu = ref({
   visible: false,
   x: 0,
@@ -39,6 +45,14 @@ const menuItems = [
   { separator: true },
   { label: '打开文件位置', action: 'show-location', needsFile: true }
 ]
+
+watch(
+  () => props.showFiles,
+  (showFiles) => {
+    activeTab.value = showFiles ? 'files' : 'outline'
+  },
+  { immediate: true }
+)
 
 function closeContextMenu() {
   contextMenu.value.visible = false
@@ -82,9 +96,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <aside class="file-sidebar" aria-label="Markdown 文件夹">
+  <aside class="file-sidebar" :class="{ 'outline-only': !showFiles }" :aria-label="sidebarLabel">
     <header class="file-sidebar-header">
       <button
+        v-if="showFiles"
         class="file-sidebar-tab"
         :class="{ active: activeTab === 'files' }"
         type="button"
@@ -164,11 +179,11 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <footer class="file-sidebar-footer">
+    <footer v-if="showFiles" class="file-sidebar-footer">
       <button class="folder-add" type="button" title="新建 Markdown 文件" @click="emit('create-file')">
         +
       </button>
-      <span class="folder-footer-name">{{ folderName }}</span>
+      <span class="folder-footer-name">{{ footerName }}</span>
       <span class="folder-count">{{ files.length }}</span>
     </footer>
   </aside>

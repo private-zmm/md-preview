@@ -38,6 +38,7 @@ const model = defineModel({
 const api = window.mdPreview
 const rootRef = ref(null)
 let editor = null
+let isEditorReady = false
 let isApplyingExternalValue = false
 let resolvingImagesToken = 0
 let editorValueSnapshot = model.value
@@ -188,11 +189,14 @@ async function uploadFiles(files) {
 }
 
 function setEditorValue(value, clearStack = false) {
-  if (!editor || editorValueSnapshot === value) return
+  if (!editor || !isEditorReady) return
+
+  const nextValue = value ?? ''
+  if (editorValueSnapshot === nextValue) return
 
   isApplyingExternalValue = true
-  editor.setValue(value, clearStack)
-  editorValueSnapshot = value
+  editor.setValue(nextValue, clearStack)
+  editorValueSnapshot = nextValue
   scheduleResolvePreviewImages()
   nextTick(() => {
     isApplyingExternalValue = false
@@ -322,7 +326,9 @@ onMounted(() => {
       scheduleResolvePreviewImages()
     },
     after() {
+      isEditorReady = true
       syncEditorTheme()
+      setEditorValue(model.value, true)
       rootRef.value?.addEventListener('paste', handlePaste, true)
       scheduleResolvePreviewImages()
     }
@@ -333,6 +339,7 @@ onBeforeUnmount(() => {
   rootRef.value?.removeEventListener('paste', handlePaste, true)
   editor?.destroy()
   editor = null
+  isEditorReady = false
 })
 
 watch(

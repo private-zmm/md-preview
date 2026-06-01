@@ -553,6 +553,10 @@ button {
   background: color-mix(in srgb, var(--app-bg) 94%, #ffffff);
 }
 
+.file-sidebar.outline-only {
+  grid-template-rows: 48px minmax(0, 1fr);
+}
+
 .file-sidebar-header {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -561,6 +565,10 @@ button {
   padding: 0 14px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--app-bg) 96%, #ffffff);
+}
+
+.file-sidebar.outline-only .file-sidebar-header {
+  grid-template-columns: 1fr;
 }
 
 .file-sidebar-tab {

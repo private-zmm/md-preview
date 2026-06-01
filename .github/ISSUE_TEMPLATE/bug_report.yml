@@ -1,0 +1,64 @@
+---
+name: Bug report
+description: Report a reproducible problem in MdPreview
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。请尽量提供可复现信息，尤其是 Windows 文件打开、保存、打包或编辑器状态相关问题。
+  - type: input
+    id: version
+    attributes:
+      label: MdPreview version or commit
+      placeholder: "0.1.0 / commit hash"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 24H2"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: 请写出最小复现步骤。
+      placeholder: |
+        1. 打开 ...
+        2. 点击 ...
+        3. 看到 ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: 你期望发生什么？
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: 实际发生了什么？
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: 可以粘贴日志、截图，或提供不含隐私内容的示例 Markdown。
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched existing issues.
+          required: true
+        - label: I can reproduce this with a minimal Markdown file or clear steps.
+          required: false

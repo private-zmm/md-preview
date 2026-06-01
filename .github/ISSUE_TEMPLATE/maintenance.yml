@@ -1,0 +1,41 @@
+---
+name: Maintenance task
+description: Track project maintenance, testing, security review, or release work
+title: "[Maintenance]: "
+labels: ["maintenance", "needs-triage"]
+body:
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: 这项维护任务覆盖哪些范围？
+      placeholder: "例如：补充 Windows 文件关联的端到端验证。"
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Expected outcome
+      description: 完成后应该交付什么？
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Tests
+        - CI
+        - Release
+        - Security review
+        - Documentation
+        - Refactor
+        - Packaging
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: 相关上下文、风险或参考链接。
