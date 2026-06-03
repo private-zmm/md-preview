@@ -67,6 +67,9 @@ function isPathInside(parentPath, childPath) {
   const relativePath = path.relative(path.resolve(parentPath), path.resolve(childPath));
   return relativePath === "" || !relativePath.startsWith("..") && !path.isAbsolute(relativePath);
 }
+function getAppIconPath() {
+  return app.isPackaged ? path.join(process.resourcesPath, "build/icon.ico") : path.join(__dirname$1, "../../build/icon.ico");
+}
 function createWindow() {
   isForceClosing = false;
   mainWindow = new BrowserWindow({
@@ -75,6 +78,7 @@ function createWindow() {
     minWidth: 860,
     minHeight: 560,
     title: "MdPreview",
+    icon: getAppIconPath(),
     backgroundColor: "#f7f6f3",
     show: false,
     webPreferences: {

@@ -41,8 +41,14 @@
       "out/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "build/icon.ico",
+        "to": "build/icon.ico"
+      }
+    ],
     "win": {
-      "signAndEditExecutable": false,
+      "icon": "build/icon.ico",
       "target": [
         "nsis",
         "portable",
