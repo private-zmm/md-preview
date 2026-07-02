@@ -462,6 +462,10 @@ function sortFolderFiles(files) {
   return [...files].sort((left, right) => left.relativePath.localeCompare(right.relativePath))
 }
 
+function countMarkdownFiles(files) {
+  return files.filter((file) => file.type !== 'directory').length
+}
+
 function createSummary(content) {
   return content
     .replace(/^#{1,6}\s+/gm, '')
@@ -482,15 +486,23 @@ function upsertFolderFile(file) {
 }
 
 function updateActiveFolderFileSummary() {
-  if (!state.filePath || folderFiles.value.length === 0) return
+  if (!state.filePath || countMarkdownFiles(folderFiles.value) === 0) return
 
   folderFiles.value = folderFiles.value.map((file) =>
-    file.filePath === state.filePath ? { ...file, summary: createSummary(state.content) } : file
+    file.type !== 'directory' && file.filePath === state.filePath ? { ...file, summary: createSummary(state.content) } : file
   )
+}
+
+function isSameOrChildPath(parentPath, childPath) {
+  if (!parentPath || !childPath) return false
+  const normalizedParent = parentPath.replace(/\\/g, '/').replace(/\/$/, '')
+  const normalizedChild = childPath.replace(/\\/g, '/')
+  return normalizedChild === normalizedParent || normalizedChild.startsWith(`${normalizedParent}/`)
 }
 
 function getFolderActionDir(file) {
   if (!file?.filePath) return folderPath.value
+  if (file.type === 'directory') return file.filePath
   if (file.filePath.startsWith('webdav://')) {
     const index = file.filePath.lastIndexOf('/')
     return index > 'webdav://'.length - 1 ? file.filePath.slice(0, index) : folderPath.value
@@ -609,6 +621,13 @@ async function handleFolderAction({ action, file }) {
       if (state.filePath === result.oldPath && result.file) {
         loadDocument(result.file)
         setStatus(`已重命名为 ${result.file.fileName}`)
+      } else if (file.type === 'directory' && isSameOrChildPath(result.oldPath, state.filePath)) {
+        loadDocument({
+          filePath: null,
+          fileName: 'Untitled.md',
+          content: ''
+        })
+        setStatus(`已重命名为 ${newName}`)
       }
       return
     }
@@ -643,7 +662,7 @@ async function handleFolderAction({ action, file }) {
             itemPath: file.filePath
           })
       applyFolderResult(result.folder)
-      if (state.filePath === result.deletedPath) {
+      if (state.filePath === result.deletedPath || isSameOrChildPath(result.deletedPath, state.filePath)) {
         loadDocument({
           filePath: null,
           fileName: 'Untitled.md',
@@ -683,7 +702,7 @@ async function openFolder() {
     folderName.value = result.folderName
     folderPath.value = result.folderPath
     folderFiles.value = result.files || []
-    setStatus(`已打开文件夹 ${result.folderName}，找到 ${folderFiles.value.length} 个 Markdown 文件`)
+    setStatus(`已打开文件夹 ${result.folderName}，找到 ${countMarkdownFiles(folderFiles.value)} 个 Markdown 文件`)
   } catch (error) {
     setStatus(`打开文件夹失败：${error.message}`)
   }
@@ -704,7 +723,7 @@ async function openRemoteFolder() {
     folderName.value = result.folderName
     folderPath.value = result.folderPath
     folderFiles.value = result.files || []
-    setStatus(`已打开远程文件夹 ${result.folderName}，找到 ${folderFiles.value.length} 个 Markdown 文件`)
+    setStatus(`已打开远程文件夹 ${result.folderName}，找到 ${countMarkdownFiles(folderFiles.value)} 个 Markdown 文件`)
   } catch (error) {
     setStatus(`打开远程文件夹失败：${error.message}`)
     showNotification(`打开远程文件夹失败：${error.message}`, 'error')
@@ -862,6 +881,7 @@ watch(isDirty, (dirty) => api?.setDocumentEdited(dirty), { immediate: true })
       <FileSidebar
         v-if="hasSidebar"
         :folder-name="folderName"
+        :folder-path="folderPath"
         :files="folderFiles"
         :outline="currentOutline"
         :active-file-path="state.filePath"

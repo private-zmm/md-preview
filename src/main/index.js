@@ -71,12 +71,22 @@ async function createMarkdownFileEntry(filePath, rootPath) {
   const parsed = path.parse(filePath)
 
   return {
+    type: 'file',
     filePath,
     fileName: path.basename(filePath),
     baseName: parsed.name,
     extension: parsed.ext,
     summary: await getMarkdownSummary(filePath),
     relativePath: rootPath ? path.relative(rootPath, filePath) : path.basename(filePath)
+  }
+}
+
+function createMarkdownDirectoryEntry(folderPath, rootPath) {
+  return {
+    type: 'directory',
+    filePath: folderPath,
+    fileName: path.basename(folderPath),
+    relativePath: path.relative(rootPath, folderPath)
   }
 }
 
@@ -201,6 +211,7 @@ async function collectMarkdownFiles(folderPath) {
       const entryPath = path.join(currentPath, entry.name)
 
       if (entry.isDirectory()) {
+        files.push(createMarkdownDirectoryEntry(entryPath, root))
         await walk(entryPath)
       } else if (entry.isFile() && isMarkdownFile(entryPath)) {
         files.push(await createMarkdownFileEntry(entryPath, root))
@@ -1019,10 +1030,17 @@ async function collectRemoteMarkdownFiles(settings, rootRemotePath) {
       if (path.basename(entry.remotePath).startsWith('.')) continue
 
       if (entry.isDirectory) {
+        files.push({
+          type: 'directory',
+          filePath: createWebDavVirtualPath(entry.remotePath),
+          fileName: path.posix.basename(trimSlashes(entry.remotePath)),
+          relativePath: trimSlashes(path.posix.relative(root, entry.remotePath))
+        })
         await walk(entry.remotePath)
       } else if (isMarkdownFile(entry.remotePath)) {
         const parsed = path.parse(entry.remotePath)
         files.push({
+          type: 'file',
           filePath: createWebDavVirtualPath(entry.remotePath),
           fileName: path.basename(entry.remotePath),
           baseName: parsed.name,

@@ -610,27 +610,67 @@ button {
 
 .file-sidebar-list {
   min-height: 0;
+  padding: 6px 6px 8px;
   overflow: auto;
 }
 
+.folder-directory,
 .folder-file {
-  display: block;
+  position: relative;
   width: 100%;
-  min-height: 78px;
-  padding: 12px 18px 11px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+  border-radius: 8px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
   text-align: left;
 }
 
-.folder-file:hover,
-.folder-file.active {
+.folder-directory {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 7px;
+  margin: 1px 0;
+  padding: 6px 10px 6px 12px;
+  color: color-mix(in srgb, var(--text) 76%, var(--muted));
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.folder-file {
+  display: block;
+  min-height: 38px;
+  margin: 1px 0;
+  padding: 6px 10px 6px 42px;
+}
+
+.folder-directory:hover,
+.folder-file:hover {
   background: color-mix(in srgb, var(--hover) 38%, transparent);
   color: var(--text);
 }
 
+.folder-file.active {
+  background: color-mix(in srgb, var(--accent) 12%, var(--hover));
+  color: var(--text);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.folder-directory-caret {
+  width: 12px;
+  color: var(--soft);
+  font-size: 11px;
+  text-align: center;
+}
+
+.folder-directory-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-file-content,
 .folder-file-title,
 .folder-file-summary {
   display: block;
@@ -641,13 +681,13 @@ button {
 
 .folder-file-title {
   white-space: nowrap;
-  font-size: 15px;
-  line-height: 1.28;
+  font-size: 13.5px;
+  line-height: 1.25;
 }
 
 .folder-file-base {
-  color: color-mix(in srgb, var(--text) 82%, var(--muted));
-  font-weight: 700;
+  color: color-mix(in srgb, var(--text) 84%, var(--muted));
+  font-weight: 650;
 }
 
 .folder-file.active .folder-file-base {
@@ -655,19 +695,17 @@ button {
 }
 
 .folder-file-ext {
-  color: color-mix(in srgb, var(--soft) 42%, transparent);
-  font-weight: 400;
+  color: color-mix(in srgb, var(--soft) 58%, transparent);
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .folder-file-summary {
-  display: -webkit-box;
-  margin-top: 6px;
-  color: var(--soft);
-  font-size: 12.5px;
-  line-height: 1.42;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  white-space: normal;
+  margin-top: 2px;
+  color: color-mix(in srgb, var(--soft) 82%, transparent);
+  font-size: 11.5px;
+  line-height: 1.25;
+  white-space: nowrap;
 }
 
 .file-sidebar-footer {
@@ -877,12 +915,26 @@ button {
 }
 
 .vditor-editor .vditor-reset table {
+  display: table;
   width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
 }
 
-.vditor-editor .vditor-reset th,
-.vditor-editor .vditor-reset td {
+.vditor-editor .vditor-reset table th,
+.vditor-editor .vditor-reset table td {
+  max-width: 1px;
   border-color: var(--border-strong);
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  white-space: normal !important;
+}
+
+.vditor-editor .vditor-reset .vditor-table,
+.vditor-editor .vditor-reset .table-wrapper,
+.vditor-editor .vditor-reset > div:has(> table) {
+  max-width: 100%;
+  overflow-x: visible !important;
 }
 
 .vditor-editor .vditor-reset img {
@@ -993,14 +1045,20 @@ button {
 
 .markdown-body table {
   width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 15px;
 }
 
-.markdown-body th,
-.markdown-body td {
+.markdown-body table th,
+.markdown-body table td {
+  max-width: 1px;
   padding: 9px 11px;
   border: 1px solid var(--border-strong);
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  white-space: normal !important;
 }
 
 .markdown-body th {
