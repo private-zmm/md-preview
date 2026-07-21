@@ -44,7 +44,7 @@
     serif;
   --preview-size: 17px;
   --preview-line: 1.82;
-  --document-width: 820px;
+  --document-width: clamp(820px, 62vw, 1120px);
   font-family:
     "Segoe UI",
     "Microsoft YaHei",
@@ -160,7 +160,7 @@
     sans-serif;
   --preview-size: 16px;
   --preview-line: 1.7;
-  --document-width: 900px;
+  --document-width: clamp(900px, 66vw, 1200px);
 }
 
 * {
@@ -869,9 +869,11 @@ button {
 .vditor-editor .vditor-wysiwyg pre.vditor-reset,
 .vditor-editor .vditor-reset {
   width: min(100%, var(--document-width));
+  height: auto !important;
   min-height: 100%;
   margin: 0 auto;
   padding: 42px 54px 72px !important;
+  overflow: visible;
   background: transparent !important;
   color: var(--text);
   font-family: var(--preview-font);
