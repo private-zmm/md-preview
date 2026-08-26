@@ -37,11 +37,22 @@ const model = defineModel({
 
 const api = window.mdPreview
 const rootRef = ref(null)
+const imageInputRef = ref(null)
+const tableMenu = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  isHeader: false,
+  isSingleColumn: false
+})
 let editor = null
 let isEditorReady = false
 let isApplyingExternalValue = false
 let resolvingImagesToken = 0
 let editorValueSnapshot = model.value
+let activeTable = null
+let activeTableRow = null
+let activeColumnIndex = -1
 
 function toSerializable(value) {
   if (!value) return null
@@ -116,19 +127,23 @@ function scheduleResolvePreviewImages() {
   window.setTimeout(resolvePreviewImages, 280)
 }
 
-function createUploadResponse(files, markdownPath) {
-  const fileName = files?.[0]?.name || 'image.png'
+function getImageSaveOptions() {
+  return {
+    markdownFilePath: props.filePath || null,
+    defaultFolderPath: props.defaultFolderPath || null,
+    imageSavePath: props.imageSavePath || 'images',
+    syncSettings: toSerializable(props.syncSettings)
+  }
+}
 
-  return JSON.stringify({
-    code: 0,
-    msg: '',
-    data: {
-      errFiles: [],
-      succMap: {
-        [fileName]: markdownPath
-      }
-    }
-  })
+function registerSavedImage(result) {
+  if (result.cleanup) {
+    emit('image-inserted', {
+      ...result.cleanup,
+      syncSettings: toSerializable(props.syncSettings)
+    })
+  }
+  emit('status', `已插入图片 ${result.markdownPath}`)
 }
 
 async function saveImageFromClipboard() {
@@ -137,25 +152,36 @@ async function saveImageFromClipboard() {
     return null
   }
 
-  const result = await api.saveClipboardImage({
-    markdownFilePath: props.filePath || null,
-    defaultFolderPath: props.defaultFolderPath || null,
-    imageSavePath: props.imageSavePath || 'images',
-    syncSettings: toSerializable(props.syncSettings)
-  })
+  const result = await api.saveClipboardImage(getImageSaveOptions())
 
   if (result?.canceled) {
     if (result.reason === 'empty') emit('status', '剪贴板里没有可粘贴的图片')
     return null
   }
 
-  if (result.cleanup) {
-    emit('image-inserted', {
-      ...result.cleanup,
-      syncSettings: toSerializable(props.syncSettings)
-    })
+  registerSavedImage(result)
+  return result
+}
+
+async function saveSelectedImage(file) {
+  if (typeof api?.saveImageFile !== 'function') {
+    emit('status', '选择图片功能需要重启应用后生效')
+    return null
   }
-  emit('status', `已插入图片 ${result.markdownPath}`)
+
+  const result = await api.saveImageFile({
+    ...getImageSaveOptions(),
+    imageData: await file.arrayBuffer(),
+    fileName: file.name,
+    mimeType: file.type
+  })
+
+  if (result?.canceled) {
+    if (result.reason === 'empty') emit('status', '图片文件为空')
+    return null
+  }
+
+  registerSavedImage(result)
   return result
 }
 
@@ -178,9 +204,13 @@ async function handlePaste(event) {
 
 async function uploadFiles(files) {
   try {
-    const result = await saveImageFromClipboard()
-    if (!result) return '未选择图片'
-    editor?.insertValue(`![${files?.[0]?.name || 'image'}](${result.markdownPath})`)
+    const file = files?.[0]
+    if (!file) return '未选择图片'
+    if (!file.type.startsWith('image/')) return '请选择图片文件'
+
+    const result = await saveSelectedImage(file)
+    if (!result) return '图片未插入'
+    editor?.insertValue(`![${file.name || 'image'}](${result.markdownPath})`)
     return null
   } catch (error) {
     emit('status', `插入图片失败：${error.message}`)
@@ -201,6 +231,141 @@ function setEditorValue(value, clearStack = false) {
   nextTick(() => {
     isApplyingExternalValue = false
   })
+}
+
+function closeTableMenu() {
+  tableMenu.value.visible = false
+  activeTable = null
+  activeTableRow = null
+  activeColumnIndex = -1
+}
+
+function openTableMenu(event) {
+  const target = event.target
+  const cell = target instanceof Element ? target.closest('td, th') : null
+  const table = cell?.closest('table')
+  const row = cell?.parentElement
+
+  if (!cell || !table || !row || !rootRef.value?.contains(table)) {
+    closeTableMenu()
+    return
+  }
+
+  const columnIndex = [...row.cells].indexOf(cell)
+  if (columnIndex < 0) return
+
+  event.preventDefault()
+  activeTable = table
+  activeTableRow = row
+  activeColumnIndex = columnIndex
+  tableMenu.value = {
+    visible: true,
+    x: Math.max(8, Math.min(event.clientX, window.innerWidth - 180)),
+    y: Math.max(8, Math.min(event.clientY, window.innerHeight - 156)),
+    isHeader: cell.tagName === 'TH',
+    isSingleColumn: row.cells.length <= 1
+  }
+}
+
+function chooseImage() {
+  imageInputRef.value?.click()
+}
+
+async function handleImageFileChange(event) {
+  const files = event.target.files
+  if (!files?.length) return
+
+  await uploadFiles(files)
+  event.target.value = ''
+}
+
+function createBlankTableCell(tagName, sourceCell) {
+  const cell = document.createElement(tagName)
+  const align = sourceCell.getAttribute('align')
+
+  if (align) cell.setAttribute('align', align)
+  cell.textContent = ' '
+  return cell
+}
+
+function syncTableContent() {
+  const nextValue = editor?.getValue()
+  if (nextValue == null) return
+
+  closeTableMenu()
+  setEditorValue(nextValue)
+  model.value = nextValue
+}
+
+function insertTableRow() {
+  const table = activeTable
+  const row = activeTableRow
+  if (!table || !row || !table.isConnected || !row.isConnected) return
+
+  const referenceCells = [...(table.rows[0]?.cells || row.cells)]
+  if (referenceCells.length === 0) return
+
+  const nextRow = document.createElement('tr')
+  referenceCells.forEach((cell) => {
+    nextRow.appendChild(createBlankTableCell('td', cell))
+  })
+
+  if (row.parentElement?.tagName === 'TBODY') {
+    row.insertAdjacentElement('afterend', nextRow)
+  } else {
+    const body = table.tBodies[0] || table.appendChild(document.createElement('tbody'))
+    body.insertBefore(nextRow, body.firstChild)
+  }
+
+  syncTableContent()
+}
+
+function insertTableColumn() {
+  const table = activeTable
+  if (!table || !table.isConnected || activeColumnIndex < 0) return
+
+  Array.from(table.rows).forEach((row) => {
+    const cell = row.cells[activeColumnIndex]
+    if (!cell) return
+
+    cell.insertAdjacentElement('afterend', createBlankTableCell(cell.tagName.toLowerCase(), cell))
+  })
+
+  syncTableContent()
+}
+
+function deleteTableRow() {
+  const row = activeTableRow
+  if (!row || !row.isConnected || tableMenu.value.isHeader) return
+
+  const body = row.parentElement
+  row.remove()
+  if (body?.tagName === 'TBODY' && body.rows.length === 0) body.remove()
+
+  syncTableContent()
+}
+
+function deleteTableColumn() {
+  const table = activeTable
+  if (!table || !table.isConnected || activeColumnIndex < 0 || tableMenu.value.isSingleColumn) return
+
+  Array.from(table.rows).forEach((row) => row.cells[activeColumnIndex]?.remove())
+  syncTableContent()
+}
+
+function runTableMenuAction(action) {
+  const actions = {
+    'row-insert': insertTableRow,
+    'column-insert': insertTableColumn,
+    'row-delete': deleteTableRow,
+    'column-delete': deleteTableColumn
+  }
+
+  actions[action]?.()
+}
+
+function handleTableMenuKeydown(event) {
+  if (event.key === 'Escape') closeTableMenu()
 }
 
 function runCommand(command) {
@@ -225,6 +390,7 @@ function runCommand(command) {
     strike: () => editor?.insertValue('~~文本~~'),
     comment: () => editor?.insertValue('<!-- 注释 -->'),
     link: () => editor?.insertValue('[链接文本](https://)'),
+    'image-insert': chooseImage,
     'table-insert': () => editor?.insertValue('\n| 标题 | 标题 | 标题 |\n| --- | --- | --- |\n| 内容 | 内容 | 内容 |\n')
   }
 
@@ -286,7 +452,7 @@ function getValue() {
 onMounted(() => {
   editor = new Vditor(rootRef.value, {
     value: model.value,
-    mode: 'ir',
+    mode: 'wysiwyg',
     lang: 'zh_CN',
     height: '100%',
     width: '100%',
@@ -316,8 +482,7 @@ onMounted(() => {
     upload: {
       accept: 'image/*',
       multiple: false,
-      handler: uploadFiles,
-      format: createUploadResponse
+      handler: uploadFiles
     },
     input(value) {
       if (isApplyingExternalValue) return
@@ -330,6 +495,9 @@ onMounted(() => {
       syncEditorTheme()
       setEditorValue(model.value, true)
       rootRef.value?.addEventListener('paste', handlePaste, true)
+      rootRef.value?.addEventListener('contextmenu', openTableMenu, true)
+      window.addEventListener('pointerdown', closeTableMenu)
+      window.addEventListener('keydown', handleTableMenuKeydown)
       scheduleResolvePreviewImages()
     }
   })
@@ -337,6 +505,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   rootRef.value?.removeEventListener('paste', handlePaste, true)
+  rootRef.value?.removeEventListener('contextmenu', openTableMenu, true)
+  window.removeEventListener('pointerdown', closeTableMenu)
+  window.removeEventListener('keydown', handleTableMenuKeydown)
   editor?.destroy()
   editor = null
   isEditorReady = false
@@ -375,5 +546,46 @@ defineExpose({
 <template>
   <div class="pane editor-pane vditor-editor-pane">
     <div ref="rootRef" class="vditor-editor"></div>
+    <input
+      ref="imageInputRef"
+      type="file"
+      accept="image/*"
+      hidden
+      @change="handleImageFileChange"
+    />
+
+    <div
+      v-if="tableMenu.visible"
+      class="table-context-menu"
+      :style="{ left: `${tableMenu.x}px`, top: `${tableMenu.y}px` }"
+      role="menu"
+      @pointerdown.stop
+    >
+      <button class="file-menu-item" type="button" role="menuitem" @click="runTableMenuAction('row-insert')">
+        <span>在下方新增一行</span>
+      </button>
+      <button class="file-menu-item" type="button" role="menuitem" @click="runTableMenuAction('column-insert')">
+        <span>在右侧新增一列</span>
+      </button>
+      <div class="file-menu-separator"></div>
+      <button
+        class="file-menu-item danger"
+        type="button"
+        role="menuitem"
+        :disabled="tableMenu.isHeader"
+        @click="runTableMenuAction('row-delete')"
+      >
+        <span>删除当前行</span>
+      </button>
+      <button
+        class="file-menu-item danger"
+        type="button"
+        role="menuitem"
+        :disabled="tableMenu.isSingleColumn"
+        @click="runTableMenuAction('column-delete')"
+      >
+        <span>删除当前列</span>
+      </button>
+    </div>
   </div>
 </template>

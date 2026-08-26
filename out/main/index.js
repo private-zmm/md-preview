@@ -643,10 +643,9 @@ function createMarkdownImagePath(imageFilePath, baseDir, preferredRelativePath, 
   }
   return toMarkdownPath(imageFilePath);
 }
-async function chooseClipboardImagePath(markdownFilePath, defaultFolderPath, imageSavePath = "images") {
+async function chooseImagePath(markdownFilePath, defaultFolderPath, imageSavePath = "images", imageName = `pasted-${getTimestamp()}.png`, dialogTitle = "保存图片") {
   const markdownDir = markdownFilePath ? path.dirname(path.resolve(markdownFilePath)) : null;
   const baseDir = markdownDir || (defaultFolderPath ? path.resolve(defaultFolderPath) : null);
-  const imageName = `pasted-${getTimestamp()}.png`;
   const preferredPath = imageSavePath?.trim() || "images";
   if (path.isAbsolute(preferredPath)) {
     const imageDir = path.resolve(preferredPath);
@@ -667,15 +666,16 @@ async function chooseClipboardImagePath(markdownFilePath, defaultFolderPath, ima
     };
   }
   const result = await dialog.showSaveDialog(mainWindow, {
-    title: "保存剪贴板图片",
+    title: dialogTitle,
     defaultPath: imageName,
     filters: [
-      { name: "PNG Image", extensions: ["png"] },
+      { name: "Image", extensions: [path.extname(imageName).slice(1) || "png"] },
       { name: "All Files", extensions: ["*"] }
     ]
   });
   if (result.canceled || !result.filePath) return null;
-  const filePath = path.extname(result.filePath) ? result.filePath : `${result.filePath}.png`;
+  const extension = path.extname(imageName) || ".png";
+  const filePath = path.extname(result.filePath) ? result.filePath : `${result.filePath}${extension}`;
   return {
     filePath,
     markdownPath: toMarkdownPath(filePath)
@@ -949,14 +949,14 @@ async function ensureWebDavDirectory(settings, remoteDir) {
     }
   }
 }
-async function uploadClipboardImageToWebDav(settings, imageBuffer, imageSavePath, imageName) {
+async function uploadImageToWebDav(settings, imageBuffer, imageSavePath, imageName, contentType) {
   const webdav = settings.webdav || {};
   const remoteImagePath = normalizeRemoteImagePath(imageSavePath, webdav);
   const remoteDir = joinKey(webdav.remotePath || "/", remoteImagePath);
   const remotePath = joinKey(remoteDir, imageName);
   await ensureWebDavDirectory(settings, remoteDir);
   await webDavRequest(settings, "PUT", remotePath, imageBuffer, {
-    "Content-Type": "image/png"
+    "Content-Type": contentType
   });
   return {
     markdownPath: createWebDavPublicUrl(settings, remotePath),
@@ -1041,13 +1041,13 @@ async function s3Request(settings, method, url, body = Buffer.alloc(0), extraHea
   }
   return response;
 }
-async function uploadClipboardImageToS3(settings, imageBuffer, imageSavePath, imageName) {
+async function uploadImageToS3(settings, imageBuffer, imageSavePath, imageName, contentType) {
   const s3 = settings.s3 || {};
   const remoteImagePath = normalizeRemoteImagePath(imageSavePath);
   const key = joinKey(s3.prefix || "", remoteImagePath, imageName);
   const url = createS3Url(settings, key);
   await s3Request(settings, "PUT", url, imageBuffer, {
-    "content-type": "image/png"
+    "content-type": contentType
   });
   return {
     markdownPath: s3.publicBaseUrl ? joinUrl(s3.publicBaseUrl, encodePathSegments(key)) : url,
@@ -1057,14 +1057,70 @@ async function uploadClipboardImageToS3(settings, imageBuffer, imageSavePath, im
     }
   };
 }
-async function uploadClipboardImageToRemote(settings, imageBuffer, imageSavePath, imageName) {
+async function uploadImageToRemote(settings, imageBuffer, imageSavePath, imageName, contentType) {
   if (settings?.syncProvider === "webdav" && hasWebDavConfig(settings)) {
-    return uploadClipboardImageToWebDav(settings, imageBuffer, imageSavePath, imageName);
+    return uploadImageToWebDav(settings, imageBuffer, imageSavePath, imageName, contentType);
   }
   if (settings?.syncProvider === "s3" && hasS3Config(settings)) {
-    return uploadClipboardImageToS3(settings, imageBuffer, imageSavePath, imageName);
+    return uploadImageToS3(settings, imageBuffer, imageSavePath, imageName, contentType);
   }
   return null;
+}
+function createImageFileName(fileName = "image.png") {
+  const parsed = path.parse(path.basename(String(fileName).replace(/[\\/]+/g, path.sep)));
+  const name = (parsed.name || "image").replace(/[<>:"/\\|?*\x00-\x1F]/g, "-").trim() || "image";
+  return `${name}-${getTimestamp()}${parsed.ext || ".png"}`;
+}
+function toImageBuffer(imageData) {
+  if (imageData instanceof ArrayBuffer) return Buffer.from(imageData);
+  if (ArrayBuffer.isView(imageData)) {
+    return Buffer.from(imageData.buffer, imageData.byteOffset, imageData.byteLength);
+  }
+  return null;
+}
+async function saveImageBuffer({
+  imageBuffer,
+  imageName,
+  contentType = "image/png",
+  markdownFilePath = null,
+  defaultFolderPath = null,
+  imageSavePath = "images",
+  syncSettings = null,
+  dialogTitle = "保存图片"
+}) {
+  const remoteImage = await uploadImageToRemote(
+    syncSettings,
+    imageBuffer,
+    imageSavePath,
+    imageName,
+    contentType
+  );
+  if (remoteImage) {
+    return {
+      canceled: false,
+      filePath: remoteImage.markdownPath,
+      markdownPath: remoteImage.markdownPath,
+      cleanup: remoteImage.cleanup
+    };
+  }
+  const target = await chooseImagePath(
+    markdownFilePath,
+    defaultFolderPath,
+    imageSavePath,
+    imageName,
+    dialogTitle
+  );
+  if (!target) return { canceled: true };
+  await fs.writeFile(target.filePath, imageBuffer);
+  return {
+    canceled: false,
+    filePath: target.filePath,
+    markdownPath: target.markdownPath,
+    cleanup: {
+      type: "local",
+      filePath: target.filePath
+    }
+  };
 }
 async function saveClipboardImage({
   markdownFilePath = null,
@@ -1078,27 +1134,36 @@ async function saveClipboardImage({
   }
   const imageBuffer = image.toPNG();
   const imageName = `pasted-${getTimestamp()}.png`;
-  const remoteImage = await uploadClipboardImageToRemote(syncSettings, imageBuffer, imageSavePath, imageName);
-  if (remoteImage) {
-    return {
-      canceled: false,
-      filePath: remoteImage.markdownPath,
-      markdownPath: remoteImage.markdownPath,
-      cleanup: remoteImage.cleanup
-    };
-  }
-  const target = await chooseClipboardImagePath(markdownFilePath, defaultFolderPath, imageSavePath);
-  if (!target) return { canceled: true };
-  await fs.writeFile(target.filePath, imageBuffer);
-  return {
-    canceled: false,
-    filePath: target.filePath,
-    markdownPath: target.markdownPath,
-    cleanup: {
-      type: "local",
-      filePath: target.filePath
-    }
-  };
+  return saveImageBuffer({
+    imageBuffer,
+    imageName,
+    markdownFilePath,
+    defaultFolderPath,
+    imageSavePath,
+    syncSettings,
+    dialogTitle: "保存剪贴板图片"
+  });
+}
+async function saveImageFile({
+  imageData,
+  fileName,
+  mimeType,
+  markdownFilePath = null,
+  defaultFolderPath = null,
+  imageSavePath = "images",
+  syncSettings = null
+}) {
+  const imageBuffer = toImageBuffer(imageData);
+  if (!imageBuffer?.length) return { canceled: true, reason: "empty" };
+  return saveImageBuffer({
+    imageBuffer,
+    imageName: createImageFileName(fileName),
+    contentType: /^image\//i.test(mimeType || "") ? mimeType : "application/octet-stream",
+    markdownFilePath,
+    defaultFolderPath,
+    imageSavePath,
+    syncSettings
+  });
 }
 async function deleteInsertedImage(image, syncSettings) {
   if (!image?.type) return;
@@ -1228,6 +1293,7 @@ ipcMain.handle(
 );
 ipcMain.handle("document:export", (_event, options) => exportMarkdownDocument(options));
 ipcMain.handle("document:save-clipboard-image", (_event, options) => saveClipboardImage(options));
+ipcMain.handle("document:save-image-file", (_event, options) => saveImageFile(options));
 ipcMain.handle("document:delete-inserted-images", (_event, options) => deleteInsertedImages(options));
 ipcMain.handle("clipboard:copy-text", (_event, text) => copyTextToClipboard(text));
 ipcMain.handle("clipboard:copy-image", (_event, source) => copyImageToClipboard(source));

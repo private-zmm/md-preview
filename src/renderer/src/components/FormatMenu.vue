@@ -19,7 +19,10 @@ const menuGroups = [
     { label: '删除线', shortcut: 'Alt+Shift+5', command: 'strike' },
     { label: '注释', command: 'comment' }
   ],
-  [{ label: '超链接', shortcut: 'Ctrl+K', command: 'link' }],
+  [
+    { label: '超链接', shortcut: 'Ctrl+K', command: 'link' },
+    { label: '插入图片...', command: 'image-insert' }
+  ],
   [{ label: '清除样式', shortcut: 'Ctrl+\\', command: 'clear-format' }]
 ]
 

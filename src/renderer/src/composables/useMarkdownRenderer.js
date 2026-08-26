@@ -27,6 +27,12 @@ const md = new MarkdownIt({
   label: true
 })
 
+const defaultValidateLink = md.validateLink
+md.validateLink = (url) => {
+  if (/^(?:file:|[a-z]:[\\/])/i.test(url)) return true
+  return defaultValidateLink(url)
+}
+
 const defaultImageRenderer =
   md.renderer.rules.image ||
   ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options))

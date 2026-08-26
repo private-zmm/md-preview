@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld("mdPreview", {
   saveRemoteMarkdownFile: (settings, filePath, content) => ipcRenderer.invoke("document:save-remote", { settings, filePath, content }),
   exportMarkdownDocument: (options) => ipcRenderer.invoke("document:export", options),
   saveClipboardImage: (options) => ipcRenderer.invoke("document:save-clipboard-image", options),
+  saveImageFile: (options) => ipcRenderer.invoke("document:save-image-file", options),
   deleteInsertedImages: (options) => ipcRenderer.invoke("document:delete-inserted-images", options),
   copyTextToClipboard: (text) => ipcRenderer.invoke("clipboard:copy-text", text),
   copyImageToClipboard: (source) => ipcRenderer.invoke("clipboard:copy-image", source),
