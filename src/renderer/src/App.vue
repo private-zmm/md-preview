@@ -4,7 +4,6 @@ import '@highlightjs/cdn-assets/styles/github.min.css'
 import TopBar from './components/TopBar.vue'
 import VditorEditorPane from './components/VditorEditorPane.vue'
 import StatusBar from './components/StatusBar.vue'
-import StartupError from './components/StartupError.vue'
 import FileSidebar from './components/FileSidebar.vue'
 import UnsavedDialog from './components/UnsavedDialog.vue'
 import SettingsPage from './components/SettingsPage.vue'
@@ -12,9 +11,9 @@ import { createInitialDocumentState, useDocumentState } from './composables/useD
 import { useMarkdownRenderer } from './composables/useMarkdownRenderer'
 import { normalizeTheme } from './constants/themes'
 import { sampleDocument } from './constants/sampleDocument'
+import { installWebApi } from './webApi'
 
-const api = window.mdPreview
-const hasDesktopApi = Boolean(api)
+const { api } = installWebApi()
 const defaultS3Settings = {
   endpoint: '',
   region: 'auto',
@@ -35,6 +34,12 @@ const defaultWebDavSettings = {
   remotePath: '/MdPreview'
 }
 
+const defaultServerSettings = {
+  serverUrl: 'http://localhost:8787',
+  email: '',
+  password: ''
+}
+
 const defaultSettings = {
   image: {
     imageProvider: 'local',
@@ -44,7 +49,8 @@ const defaultSettings = {
   remote: {
     webdav: { ...defaultWebDavSettings },
     webdavImagePath: 'images'
-  }
+  },
+  server: { ...defaultServerSettings }
 }
 const state = createInitialDocumentState()
 const statusText = ref('Ready')
@@ -66,7 +72,7 @@ const appSettings = ref(loadSettings())
 const pendingInsertedImages = ref([])
 
 const { isDirty, title, wordCount, setDocument, markSaved } = useDocumentState(state)
-const { html, render } = hasDesktopApi ? useMarkdownRenderer(api) : { html: ref(''), render: async () => {} }
+const { html, render } = useMarkdownRenderer(api)
 
 const hasSidebar = computed(() => Boolean(folderName.value || currentOutline.value.length > 0))
 const workspaceClass = computed(() => `workspace ${hasSidebar.value ? 'has-sidebar' : ''}`)
@@ -143,7 +149,8 @@ function normalizeSettings(settings = {}) {
       remote: {
         webdav: legacyWebDav,
         webdavImagePath: legacyImagePath
-      }
+      },
+      server: { ...defaultServerSettings }
     }
   }
 
@@ -165,6 +172,10 @@ function normalizeSettings(settings = {}) {
         previousLocal.imageSavePath ||
         settings.imageSavePath ||
         defaultSettings.remote.webdavImagePath
+    },
+    server: {
+      ...defaultServerSettings,
+      ...(settings.server || {})
     }
   }
 }
@@ -416,6 +427,31 @@ function requestUnsavedDecision() {
   return new Promise((resolve) => {
     unsavedDialogResolver = resolve
   })
+}
+
+async function saveServerSettings(settings) {
+  const nextSettings = {
+    serverUrl: settings.serverUrl || defaultServerSettings.serverUrl,
+    email: settings.email || '',
+    password: ''
+  }
+  persistSettings({ ...appSettings.value, server: nextSettings })
+
+  try {
+    if (settings.disconnect) {
+      api.logout?.()
+      setStatus('已断开服务器连接')
+      showNotification('已断开服务器连接', 'success')
+      return
+    }
+
+    await api.login(settings)
+    setStatus(`已连接 ${settings.serverUrl}`)
+    showNotification('服务器连接成功', 'success')
+  } catch (error) {
+    setStatus(`服务器连接失败：${error.message}`)
+    showNotification(`服务器连接失败：${error.message}`, 'error')
+  }
 }
 
 function resolveUnsavedDecision(decision) {
@@ -798,8 +834,6 @@ function handleKeyboard(event) {
 }
 
 onMounted(async () => {
-  if (!hasDesktopApi) return
-
   setTheme(state.theme)
   loadDocument({
     filePath: null,
@@ -848,9 +882,7 @@ watch(isDirty, (dirty) => api?.setDocumentEdited(dirty), { immediate: true })
 </script>
 
 <template>
-  <StartupError v-if="!hasDesktopApi" />
-
-  <main v-else class="shell">
+  <main class="shell">
     <TopBar
       :is-dirty="isDirty"
       :theme="state.theme"
@@ -875,6 +907,7 @@ watch(isDirty, (dirty) => api?.setDocumentEdited(dirty), { immediate: true })
       @save="saveSettings"
       @save-image="saveImageSettings"
       @save-remote="saveRemoteSettings"
+      @save-server="saveServerSettings"
     />
 
     <section v-else :class="workspaceClass">

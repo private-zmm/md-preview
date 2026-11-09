@@ -8,11 +8,12 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['close', 'status', 'save-image', 'save-remote'])
+const emit = defineEmits(['close', 'status', 'save-image', 'save-remote', 'save-server'])
 const activeTab = ref('image')
 const tabs = [
   { key: 'image', label: '图像设置' },
-  { key: 'remote', label: '远程设置' }
+  { key: 'remote', label: '远程设置' },
+  { key: 'server', label: '服务器连接' }
 ]
 
 function cloneSettings(settings) {
@@ -35,7 +36,12 @@ function saveCurrentSettings() {
     return
   }
 
-  emit('save-remote', cloneSettings(localSettings.value.remote))
+  if (activeTab.value === 'remote') {
+    emit('save-remote', cloneSettings(localSettings.value.remote))
+    return
+  }
+
+  emit('save-server', cloneSettings(localSettings.value.server))
 }
 
 async function chooseLocalImagePath() {
@@ -203,7 +209,7 @@ function testRemoteWebDav() {
           </div>
         </section>
 
-        <section v-else class="settings-section">
+        <section v-else-if="activeTab === 'remote'" class="settings-section">
           <h2>远程设置</h2>
 
           <div class="settings-row">
@@ -261,13 +267,53 @@ function testRemoteWebDav() {
             </label>
           </div>
         </section>
+
+        <section v-else class="settings-section">
+          <h2>服务器连接</h2>
+
+          <div class="settings-row">
+            <div>
+              <h3>连接 Web 服务</h3>
+              <p>登录后，桌面端可以直接打开、编辑和保存服务端文档。</p>
+            </div>
+          </div>
+
+          <div class="settings-form-grid">
+            <label class="settings-field">
+              <span>服务地址</span>
+              <input
+                v-model.trim="localSettings.server.serverUrl"
+                class="settings-input"
+                type="url"
+                placeholder="http://localhost:8787"
+              />
+            </label>
+            <label class="settings-field">
+              <span>邮箱</span>
+              <input v-model.trim="localSettings.server.email" class="settings-input" type="email" />
+            </label>
+            <label class="settings-field">
+              <span>密码</span>
+              <input v-model="localSettings.server.password" class="settings-input" type="password" />
+            </label>
+          </div>
+
+          <div class="settings-panel-actions">
+            <button class="settings-secondary" type="button" @click="emit('save-server', cloneSettings(localSettings.server))">
+              登录并连接
+            </button>
+            <button class="settings-secondary" type="button" @click="emit('save-server', { ...cloneSettings(localSettings.server), disconnect: true })">
+              断开连接
+            </button>
+          </div>
+        </section>
       </div>
     </div>
 
     <footer class="settings-page-footer">
       <button class="dialog-button" type="button" @click="emit('close')">返回</button>
       <button class="dialog-button primary settings-save-button" type="button" @click="saveCurrentSettings">
-        {{ activeTab === 'image' ? '保存图像设置' : '保存远程设置' }}
+      {{ activeTab === 'image' ? '保存图像设置' : activeTab === 'remote' ? '保存远程设置' : '保存服务器设置' }}
       </button>
     </footer>
   </section>

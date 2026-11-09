@@ -9,7 +9,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['status'])
-const api = window.mdPreview
+const api = window.mdPreviewBridge || window.mdPreview
 const previewRef = ref(null)
 const imageMenu = ref({
   visible: false,

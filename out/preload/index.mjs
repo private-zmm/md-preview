@@ -35,6 +35,9 @@ contextBridge.exposeInMainWorld("mdPreview", {
   setWindowTitle: (title) => ipcRenderer.invoke("window:set-title", title),
   setDocumentEdited: (edited) => ipcRenderer.invoke("window:set-document-edited", edited),
   forceClose: () => ipcRenderer.invoke("window:force-close"),
+  saveServerSession: (session) => ipcRenderer.invoke("server:save-session", session),
+  loadServerSession: () => ipcRenderer.invoke("server:load-session"),
+  clearServerSession: () => ipcRenderer.invoke("server:clear-session"),
   onOpenFromSystem: (callback) => {
     const listener = (_event, filePath) => callback(filePath);
     ipcRenderer.on("document:open-from-system", listener);

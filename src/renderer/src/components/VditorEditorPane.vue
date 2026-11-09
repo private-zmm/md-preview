@@ -35,7 +35,7 @@ const model = defineModel({
   required: true
 })
 
-const api = window.mdPreview
+const api = window.mdPreviewBridge || window.mdPreview
 const rootRef = ref(null)
 const imageInputRef = ref(null)
 const tableMenu = ref({

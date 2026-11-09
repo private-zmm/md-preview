@@ -1,4 +1,4 @@
-import { ipcMain, dialog, app, BrowserWindow, shell, clipboard, nativeImage, Menu } from "electron";
+import { ipcMain, dialog, safeStorage, app, BrowserWindow, shell, clipboard, nativeImage, Menu } from "electron";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -1324,6 +1324,28 @@ ipcMain.handle("window:force-close", () => {
   isForceClosing = true;
   mainWindow.setDocumentEdited(false);
   mainWindow.destroy();
+});
+function getServerSessionPath() {
+  return path.join(app.getPath("userData"), "server-session.bin");
+}
+ipcMain.handle("server:save-session", async (_event, session) => {
+  if (!safeStorage.isEncryptionAvailable()) throw new Error("系统安全存储不可用");
+  const encrypted = safeStorage.encryptString(JSON.stringify(session || {}));
+  await fs.writeFile(getServerSessionPath(), encrypted);
+  return { ok: true };
+});
+ipcMain.handle("server:load-session", async () => {
+  if (!safeStorage.isEncryptionAvailable()) return null;
+  try {
+    const encrypted = await fs.readFile(getServerSessionPath());
+    return JSON.parse(safeStorage.decryptString(encrypted));
+  } catch {
+    return null;
+  }
+});
+ipcMain.handle("server:clear-session", async () => {
+  await fs.rm(getServerSessionPath(), { force: true });
+  return { ok: true };
 });
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {

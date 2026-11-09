@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mdpreview
+      POSTGRES_USER: mdpreview
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - mdpreview-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mdpreview -d mdpreview"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://mdpreview:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/mdpreview
+      DATA_DIR: /var/lib/mdpreview
+      BACKUP_DIR: /var/lib/mdpreview/backups
+    ports:
+      - "8787:8787"
+    volumes:
+      - mdpreview-data:/var/lib/mdpreview
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  mdpreview-postgres:
+  mdpreview-data:

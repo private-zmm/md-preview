@@ -78,6 +78,88 @@ npm run dev
 npm run build
 ```
 
+### 浏览器版
+
+浏览器版使用本地 Web API 运行，不依赖 Electron。首次使用时可以打开 Markdown 文件或文件夹，保存会下载 Markdown 文件；图片可以以内嵌数据保存。浏览器版目前不包含桌面文件关联、WebDAV 和 PDF/PNG 导出。
+
+```bash
+# 开发模式，默认访问 http://localhost:5173
+npm run dev:web
+
+# 打包静态文件到 dist-web/
+npm run build:web
+
+# 本地预览打包结果，默认访问 http://localhost:4173
+npm run preview:web
+```
+
+`dist-web/` 是标准静态网站目录，可以部署到 Nginx、IIS、GitHub Pages、Vercel 等静态托管服务。局域网访问时使用 `npm run dev:web -- --host 0.0.0.0`，然后在其他设备打开本机的 `5173` 端口。
+
+### 服务端 Docker 部署
+
+服务端代码位于 `server/`，使用 PostgreSQL 保存业务数据，使用外部数据目录保存 Markdown 和图片。S3 只在配置后用于异地备份。
+
+```bash
+cp .env.example .env
+# Windows PowerShell 可使用：Copy-Item .env.example .env
+# 编辑 .env，至少修改 JWT_SECRET 和 ADMIN_PASSWORD
+docker compose up -d --build
+```
+
+服务端默认地址为 `http://localhost:8787`，健康检查地址为 `http://localhost:8787/health`。默认管理员账号由 `.env` 中的 `ADMIN_EMAIL` 和 `ADMIN_PASSWORD` 创建。
+
+服务端 API 主要包括：
+
+```text
+POST /api/auth/login
+GET  /api/documents
+POST /api/documents
+PUT  /api/documents/:id
+POST /api/documents/:id/assets
+GET  /api/search
+GET  /api/backups
+POST /api/backups/create
+POST /api/backups/:id/restore
+```
+
+桌面端打开“设置 → 服务器连接”，填写服务地址、邮箱和密码后登录。登录后，打开文件夹、保存、重命名、复制和删除操作会直接作用于服务端数据；未登录时仍使用原来的本地文件模式。
+
+### 开发环境启动
+
+首次进入项目先安装依赖：
+
+```bash
+npm install
+```
+
+如果需要启动服务端，先准备环境变量：
+
+```bash
+# PowerShell
+Copy-Item .env.example .env
+```
+
+本地开发推荐让 Docker 只运行 PostgreSQL：
+
+```bash
+docker compose up -d postgres
+npm run server:dev
+```
+
+服务端启动后访问 `http://localhost:8787/health` 检查状态。浏览器前端另开一个终端：
+
+```bash
+npm run dev:web
+```
+
+然后访问 `http://localhost:5173`。桌面端开发版使用：
+
+```bash
+npm run dev
+```
+
+桌面端默认是本地模式；要操作服务端数据，在“设置 → 服务器连接”中登录 `http://localhost:8787`。
+
 ### 打包
 
 生成一个可安装的 Windows `.exe` 安装包：
