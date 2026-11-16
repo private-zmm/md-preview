@@ -14,26 +14,17 @@ const props = defineProps({
     type: Array,
     default: () => []
   },
-  outline: {
-    type: Array,
-    default: () => []
-  },
   activeFilePath: {
     type: String,
     default: null
-  },
-  showFiles: {
-    type: Boolean,
-    default: true
   }
 })
 
-const emit = defineEmits(['create-file', 'open-file', 'folder-action', 'select-outline', 'resize-start'])
-const activeTab = ref(props.showFiles ? 'files' : 'outline')
+const emit = defineEmits(['create-file', 'open-file', 'folder-action', 'resize-start'])
 const expandedDirs = ref(new Set())
 const rootExpanded = ref(true)
 const searchQuery = ref('')
-const sidebarLabel = computed(() => (props.showFiles ? 'Markdown 文件夹' : 'Markdown 大纲'))
+const sidebarLabel = 'Markdown 文件夹'
 const footerName = computed(() => props.folderName || '当前文件')
 const markdownFileCount = computed(() => props.files.filter((file) => file.type !== 'directory').length)
 const fileTree = computed(() => buildFileTree(props.files))
@@ -186,14 +177,6 @@ function toggleDir(node) {
 }
 
 watch(
-  () => props.showFiles,
-  (showFiles) => {
-    activeTab.value = showFiles ? 'files' : 'outline'
-  },
-  { immediate: true }
-)
-
-watch(
   displayFileTree,
   (nodes) => {
     const existingPaths = new Set(collectDirectoryPaths(nodes))
@@ -219,8 +202,6 @@ function closeContextMenu() {
 }
 
 function openContextMenu(event, file = null) {
-  if (activeTab.value !== 'files') return
-
   event.preventDefault()
   contextMenu.value = {
     visible: true,
@@ -269,9 +250,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <aside class="file-sidebar" :class="{ 'outline-only': !showFiles }" :aria-label="sidebarLabel">
+  <aside class="file-sidebar" :aria-label="sidebarLabel">
     <header class="file-sidebar-header">
-      <label v-if="showFiles" class="file-sidebar-search">
+      <label class="file-sidebar-search">
         <svg class="file-sidebar-search-icon" viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="10.8" cy="10.8" r="6.8"></circle>
           <path d="m16 16 5 5"></path>
@@ -280,28 +261,9 @@ onUnmounted(() => {
         <button v-if="searchQuery" class="file-sidebar-search-clear" type="button" aria-label="清除搜索" @click="searchQuery = ''">×</button>
       </label>
 
-      <div class="file-sidebar-tabs">
-        <button
-          v-if="showFiles"
-          class="file-sidebar-tab"
-          :class="{ active: activeTab === 'files' }"
-          type="button"
-          @click="activeTab = 'files'"
-        >
-          文件
-        </button>
-        <button
-          class="file-sidebar-tab"
-          :class="{ active: activeTab === 'outline' }"
-          type="button"
-          @click="activeTab = 'outline'"
-        >
-          大纲
-        </button>
-      </div>
     </header>
 
-    <div v-if="activeTab === 'files'" class="file-sidebar-list" @contextmenu="openContextMenu($event)">
+    <div class="file-sidebar-list" @contextmenu="openContextMenu($event)">
       <button v-if="folderName" class="folder-root" type="button" :title="folderPath || folderName" @click="rootExpanded = !rootExpanded">
         <svg class="tree-chevron" :class="{ expanded: rootExpanded }" viewBox="0 0 16 16" aria-hidden="true">
           <path d="m4 6 4 4 4-4"></path>
@@ -385,23 +347,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div v-else class="outline-list">
-      <div v-if="outline.length === 0" class="empty-folder">当前文件没有标题</div>
-
-      <button
-        v-for="item in outline"
-        v-else
-        :key="item.id"
-        class="outline-item"
-        :class="`level-${item.level}`"
-        type="button"
-        @click="emit('select-outline', item)"
-      >
-        {{ item.title }}
-      </button>
-    </div>
-
-    <footer v-if="showFiles" class="file-sidebar-footer">
+    <footer class="file-sidebar-footer">
       <button class="folder-add" type="button" title="新建 Markdown 文件" @click="emit('create-file')">
         +
       </button>

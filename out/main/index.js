@@ -490,136 +490,23 @@ function joinUrl(baseUrl, ...parts) {
 function joinKey(...parts) {
   return parts.map((part) => trimSlashes(String(part || "").replace(/\\/g, "/"))).filter(Boolean).join("/");
 }
-function tryDecodeURIComponent(value) {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
+function normalizeRemoteImagePath(imageSavePath = "images") {
+  const raw = String(imageSavePath || "").trim();
+  if (path.win32.isAbsolute(raw) && !raw.startsWith("/")) {
+    return path.win32.basename(path.win32.normalize(raw)) || "images";
   }
-}
-function getUrlPathname(value) {
-  try {
-    return tryDecodeURIComponent(new URL(value).pathname);
-  } catch {
-    return "";
-  }
-}
-function stripRemotePathPrefix(targetPath, prefixPath) {
-  const target = `/${trimSlashes(tryDecodeURIComponent(targetPath).replace(/\\/g, "/"))}`;
-  const prefix = `/${trimSlashes(tryDecodeURIComponent(prefixPath).replace(/\\/g, "/"))}`;
-  if (prefix === "/") return trimSlashes(target);
-  if (target === prefix) return "";
-  if (target.startsWith(`${prefix}/`)) return trimSlashes(target.slice(prefix.length));
-  return trimSlashes(target);
-}
-function normalizeRemoteImagePath(imageSavePath = "images", webdav = {}) {
-  const rawPath = String(imageSavePath || "").trim();
-  if (!rawPath) return "images";
-  if (path.win32.isAbsolute(rawPath) && !rawPath.startsWith("/")) {
-    return path.win32.basename(path.win32.normalize(rawPath)) || "images";
-  }
-  let remotePath = rawPath;
-  if (/^https?:\/\//i.test(remotePath)) {
-    remotePath = getUrlPathname(remotePath);
-  } else if (/^webdav:\/\//i.test(remotePath)) {
-    remotePath = remotePath.slice("webdav://".length);
-  }
-  remotePath = tryDecodeURIComponent(remotePath).replace(/[?#].*$/g, "").replace(/\\/g, "/").replace(/^[A-Za-z]:\/?/g, "");
-  const knownPrefixes = [
-    getUrlPathname(webdav.publicBaseUrl),
-    getUrlPathname(webdav.url),
-    webdav.remotePath
-  ].filter(Boolean);
-  for (const prefix of knownPrefixes) {
-    const nextPath = stripRemotePathPrefix(remotePath, prefix);
-    if (nextPath !== trimSlashes(remotePath)) {
-      remotePath = nextPath;
-    }
-  }
-  remotePath = trimSlashes(remotePath);
-  return remotePath || "images";
-}
-function createWebDavPublicUrl(settings, remotePath) {
-  const webdav = settings.webdav || {};
-  const baseUrl = webdav.publicBaseUrl || webdav.url;
-  const basePath = getUrlPathname(baseUrl);
-  const markdownRemotePath = stripRemotePathPrefix(remotePath, basePath);
-  return joinUrl(baseUrl, encodePathSegments(markdownRemotePath));
+  const value = raw.replace(/\\/g, "/");
+  return value.replace(/^\/+|\/+$/g, "") || "images";
 }
 function encodePathSegments(value) {
   return String(value).split("/").map((segment) => encodeURIComponent(segment)).join("/");
-}
-function hasWebDavConfig(settings) {
-  return Boolean(settings?.webdav?.url);
 }
 function hasS3Config(settings) {
   return Boolean(
     settings?.s3?.endpoint && settings?.s3?.bucket && settings?.s3?.accessKeyId && settings?.s3?.secretAccessKey
   );
 }
-function getImageMimeType(filePath) {
-  const extension = path.extname(filePath).toLowerCase();
-  const mimeTypes = {
-    ".apng": "image/apng",
-    ".avif": "image/avif",
-    ".bmp": "image/bmp",
-    ".gif": "image/gif",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".png": "image/png",
-    ".svg": "image/svg+xml",
-    ".webp": "image/webp"
-  };
-  return mimeTypes[extension] || "application/octet-stream";
-}
-function getWebDavAuthHeaders(settings) {
-  const webdav = settings?.webdav || {};
-  if (!webdav.username && !webdav.password) return {};
-  return {
-    Authorization: `Basic ${Buffer.from(`${webdav.username || ""}:${webdav.password || ""}`).toString(
-      "base64"
-    )}`
-  };
-}
-function isUrlInsideBase(url, baseUrl) {
-  if (!url || !baseUrl) return false;
-  try {
-    const parsedUrl = new URL(url);
-    const parsedBase = new URL(baseUrl);
-    const basePath = parsedBase.pathname.replace(/\/+$/g, "");
-    return parsedUrl.origin === parsedBase.origin && (!basePath || parsedUrl.pathname === basePath || parsedUrl.pathname.startsWith(`${basePath}/`));
-  } catch {
-    return false;
-  }
-}
-function isWebDavImageUrl(source, settings) {
-  const webdav = settings?.webdav || {};
-  return isUrlInsideBase(source, webdav.publicBaseUrl) || isUrlInsideBase(source, webdav.url);
-}
-function responseToDataUrl(response, source, buffer) {
-  const contentType = response.headers.get("content-type") || getImageMimeType(getUrlPathname(source));
-  return `data:${contentType};base64,${Buffer.from(buffer).toString("base64")}`;
-}
-async function resolveRemoteImageAssetUrl(markdownBasePath, source, settings) {
-  if (settings?.syncProvider !== "webdav" || !hasWebDavConfig(settings)) return null;
-  if (/^https?:\/\//i.test(source)) {
-    if (!isWebDavImageUrl(source, settings)) return null;
-    const response2 = await fetch(source, {
-      headers: getWebDavAuthHeaders(settings)
-    });
-    if (!response2.ok) throw new Error(`WebDAV 图片读取失败：HTTP ${response2.status}`);
-    return responseToDataUrl(response2, source, await response2.arrayBuffer());
-  }
-  if (!markdownBasePath?.startsWith("webdav://")) return null;
-  const markdownRemotePath = parseWebDavVirtualPath(markdownBasePath);
-  const baseDir = isMarkdownFile(markdownRemotePath) ? path.posix.dirname(markdownRemotePath) : markdownRemotePath;
-  const remotePath = source.startsWith("/") ? `/${trimSlashes(source)}` : path.posix.resolve(baseDir, source);
-  const response = await webDavRequest(settings, "GET", remotePath);
-  return responseToDataUrl(response, source, await response.arrayBuffer());
-}
-async function resolveImageAssetUrl(markdownBasePath, source, syncSettings = null) {
-  const remoteAssetUrl = await resolveRemoteImageAssetUrl(markdownBasePath, source, syncSettings);
-  if (remoteAssetUrl) return remoteAssetUrl;
+async function resolveImageAssetUrl(markdownBasePath, source) {
   if (!source || /^(https?:|data:|mailto:|#)/i.test(source)) return source;
   let resolved;
   if (/^file:/i.test(source)) {
@@ -679,291 +566,6 @@ async function chooseImagePath(markdownFilePath, defaultFolderPath, imageSavePat
   return {
     filePath,
     markdownPath: toMarkdownPath(filePath)
-  };
-}
-async function webDavRequest(settings, method, remotePath, body = null, headers = {}) {
-  const webdav = settings.webdav || {};
-  const requestHeaders = { ...headers };
-  if (webdav.username || webdav.password) {
-    requestHeaders.Authorization = `Basic ${Buffer.from(
-      `${webdav.username || ""}:${webdav.password || ""}`
-    ).toString("base64")}`;
-  }
-  const response = await fetch(joinUrl(webdav.url, remotePath), {
-    method,
-    headers: requestHeaders,
-    body
-  });
-  if (!response.ok && response.status !== 207 && !(method === "MKCOL" && response.status === 405)) {
-    throw new Error(`WebDAV ${method} 失败：HTTP ${response.status}`);
-  }
-  return response;
-}
-function createWebDavVirtualPath(remotePath) {
-  return `webdav://${encodePathSegments(trimSlashes(remotePath))}`;
-}
-function parseWebDavVirtualPath(filePath) {
-  const value = String(filePath || "");
-  if (!value.startsWith("webdav://")) return value;
-  return `/${decodeURIComponent(value.slice("webdav://".length))}`;
-}
-function isRemotePathInside(parentPath, childPath) {
-  const parent = `/${trimSlashes(parentPath)}`;
-  const child = `/${trimSlashes(childPath)}`;
-  const relativePath = path.posix.relative(parent, child);
-  return relativePath === "" || !relativePath.startsWith("..") && !path.posix.isAbsolute(relativePath);
-}
-function assertInsideRemoteFolder(rootRemotePath, targetRemotePath) {
-  const root = `/${trimSlashes(rootRemotePath)}`;
-  const target = `/${trimSlashes(targetRemotePath)}`;
-  if (!isRemotePathInside(root, target)) {
-    throw new Error("目标路径不在当前远程文件夹内");
-  }
-  return target;
-}
-function createWebDavResourceUrl(settings, remotePath) {
-  return joinUrl(settings.webdav?.url, encodePathSegments(remotePath));
-}
-function parseWebDavResponses(xml) {
-  return [...String(xml).matchAll(/<[^:>]*(?::)?response\b[\s\S]*?<\/[^:>]*(?::)?response>/gi)].map(
-    (match) => {
-      const block = match[0];
-      const href = /<[^:>]*(?::)?href\b[^>]*>([\s\S]*?)<\/[^:>]*(?::)?href>/i.exec(block)?.[1] || "";
-      const isDirectory = /<[^:>]*(?::)?collection\b/i.test(block);
-      return {
-        href: href.trim(),
-        isDirectory
-      };
-    }
-  );
-}
-function hrefToRemotePath(settings, href) {
-  const webdav = settings.webdav || {};
-  const baseUrl = new URL(webdav.url);
-  const itemUrl = new URL(href, webdav.url);
-  const basePath = decodeURIComponent(baseUrl.pathname.replace(/\/+$/g, ""));
-  const itemPath = decodeURIComponent(itemUrl.pathname);
-  const remotePath = basePath && itemPath.startsWith(basePath) ? itemPath.slice(basePath.length) : itemPath;
-  return `/${trimSlashes(remotePath)}`;
-}
-async function listWebDavDirectory(settings, remotePath) {
-  const response = await webDavRequest(settings, "PROPFIND", remotePath || "/", null, {
-    Depth: "1"
-  });
-  const xml = await response.text();
-  const currentPath = `/${trimSlashes(remotePath)}`;
-  return parseWebDavResponses(xml).map((item) => ({
-    ...item,
-    remotePath: hrefToRemotePath(settings, item.href)
-  })).filter((item) => trimSlashes(item.remotePath) !== trimSlashes(currentPath));
-}
-async function remoteResourceExists(settings, remotePath) {
-  try {
-    await webDavRequest(settings, "PROPFIND", remotePath, null, {
-      Depth: "0"
-    });
-    return true;
-  } catch (error) {
-    if (String(error.message).includes("HTTP 404")) return false;
-    throw error;
-  }
-}
-async function readRemoteMarkdownFile(settings, filePath) {
-  const remotePath = parseWebDavVirtualPath(filePath);
-  const response = await webDavRequest(settings, "GET", remotePath);
-  const content = await response.text();
-  return {
-    canceled: false,
-    filePath: createWebDavVirtualPath(remotePath),
-    fileName: path.basename(remotePath),
-    content
-  };
-}
-async function getRemoteMarkdownSummary(settings, remotePath) {
-  try {
-    const document = await readRemoteMarkdownFile(settings, createWebDavVirtualPath(remotePath));
-    return stripMarkdown(document.content).slice(0, 50);
-  } catch {
-    return "";
-  }
-}
-async function collectRemoteMarkdownFiles(settings, rootRemotePath) {
-  const root = `/${trimSlashes(rootRemotePath)}`;
-  const files = [];
-  async function walk(currentPath) {
-    if (files.length >= maxFolderFiles) return;
-    const entries = await listWebDavDirectory(settings, currentPath);
-    for (const entry of entries) {
-      if (files.length >= maxFolderFiles) return;
-      if (path.basename(entry.remotePath).startsWith(".")) continue;
-      if (entry.isDirectory) {
-        files.push({
-          type: "directory",
-          filePath: createWebDavVirtualPath(entry.remotePath),
-          fileName: path.posix.basename(trimSlashes(entry.remotePath)),
-          relativePath: trimSlashes(path.posix.relative(root, entry.remotePath))
-        });
-        await walk(entry.remotePath);
-      } else if (isMarkdownFile(entry.remotePath)) {
-        const parsed = path.parse(entry.remotePath);
-        files.push({
-          type: "file",
-          filePath: createWebDavVirtualPath(entry.remotePath),
-          fileName: path.basename(entry.remotePath),
-          baseName: parsed.name,
-          extension: parsed.ext,
-          summary: await getRemoteMarkdownSummary(settings, entry.remotePath),
-          relativePath: trimSlashes(path.posix.relative(root, entry.remotePath))
-        });
-      }
-    }
-  }
-  await walk(root);
-  return files.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
-}
-async function openRemoteMarkdownFolder(settings) {
-  if (!hasWebDavConfig(settings)) throw new Error("请先配置 WebDAV 服务器地址");
-  const remotePath = settings.webdav.remotePath || "/";
-  await ensureWebDavDirectory(settings, remotePath);
-  const files = await collectRemoteMarkdownFiles(settings, remotePath);
-  return {
-    canceled: false,
-    folderPath: createWebDavVirtualPath(remotePath),
-    folderName: path.posix.basename(trimSlashes(remotePath)) || "WebDAV",
-    files
-  };
-}
-async function refreshRemoteMarkdownFolder(settings, folderPath) {
-  const remotePath = parseWebDavVirtualPath(folderPath);
-  const files = await collectRemoteMarkdownFiles(settings, remotePath);
-  return {
-    canceled: false,
-    folderPath: createWebDavVirtualPath(remotePath),
-    folderName: path.posix.basename(trimSlashes(remotePath)) || "WebDAV",
-    files
-  };
-}
-async function createRemoteMarkdownFileInFolder({ settings, folderPath, targetDirPath, fileName }) {
-  const root = parseWebDavVirtualPath(folderPath);
-  const targetDir = assertInsideRemoteFolder(root, parseWebDavVirtualPath(targetDirPath || folderPath));
-  const finalName = normalizeMarkdownFileName(fileName);
-  const remotePath = assertInsideRemoteFolder(root, `/${joinKey(targetDir, finalName)}`);
-  if (await remoteResourceExists(settings, remotePath)) throw new Error("文件已存在");
-  await webDavRequest(settings, "PUT", remotePath, "", {
-    "Content-Type": "text/markdown; charset=utf-8"
-  });
-  return {
-    file: await readRemoteMarkdownFile(settings, createWebDavVirtualPath(remotePath)),
-    folder: await refreshRemoteMarkdownFolder(settings, folderPath)
-  };
-}
-async function createRemoteFolderInFolder({ settings, folderPath, targetDirPath, folderName }) {
-  const root = parseWebDavVirtualPath(folderPath);
-  const trimmedName = String(folderName || "").trim();
-  if (!trimmedName) throw new Error("文件夹名不能为空");
-  const targetDir = assertInsideRemoteFolder(root, parseWebDavVirtualPath(targetDirPath || folderPath));
-  const remotePath = assertInsideRemoteFolder(root, `/${joinKey(targetDir, trimmedName)}`);
-  if (await remoteResourceExists(settings, remotePath)) throw new Error("文件夹已存在");
-  await webDavRequest(settings, "MKCOL", remotePath);
-  return refreshRemoteMarkdownFolder(settings, folderPath);
-}
-async function renameRemoteFolderItem({ settings, folderPath, itemPath, newName }) {
-  const root = parseWebDavVirtualPath(folderPath);
-  const sourcePath = assertInsideRemoteFolder(root, parseWebDavVirtualPath(itemPath));
-  const trimmedName = String(newName || "").trim();
-  if (!trimmedName) throw new Error("名称不能为空");
-  const finalName = isMarkdownFile(sourcePath) ? normalizeMarkdownFileName(trimmedName) : trimmedName;
-  const targetPath = assertInsideRemoteFolder(root, `/${joinKey(path.posix.dirname(sourcePath), finalName)}`);
-  await webDavRequest(settings, "MOVE", sourcePath, null, {
-    Destination: createWebDavResourceUrl(settings, targetPath),
-    Overwrite: "F"
-  });
-  return {
-    oldPath: createWebDavVirtualPath(sourcePath),
-    newPath: createWebDavVirtualPath(targetPath),
-    folder: await refreshRemoteMarkdownFolder(settings, folderPath),
-    file: isMarkdownFile(targetPath) ? await readRemoteMarkdownFile(settings, createWebDavVirtualPath(targetPath)) : null
-  };
-}
-async function duplicateRemoteMarkdownFile({ settings, folderPath, filePath }) {
-  const root = parseWebDavVirtualPath(folderPath);
-  const sourcePath = assertInsideRemoteFolder(root, parseWebDavVirtualPath(filePath));
-  if (!isMarkdownFile(sourcePath)) throw new Error("只能复制 Markdown 文件");
-  const parsed = path.posix.parse(sourcePath);
-  let index = 1;
-  let targetPath;
-  while (!targetPath) {
-    const suffix = index === 1 ? " copy" : ` copy ${index}`;
-    const candidate = assertInsideRemoteFolder(root, `/${joinKey(parsed.dir, `${parsed.name}${suffix}${parsed.ext}`)}`);
-    try {
-      await webDavRequest(settings, "COPY", sourcePath, null, {
-        Destination: createWebDavResourceUrl(settings, candidate),
-        Overwrite: "F"
-      });
-      targetPath = candidate;
-    } catch (error) {
-      if (!String(error.message).includes("HTTP 412")) throw error;
-      index += 1;
-    }
-  }
-  return {
-    file: await readRemoteMarkdownFile(settings, createWebDavVirtualPath(targetPath)),
-    folder: await refreshRemoteMarkdownFolder(settings, folderPath)
-  };
-}
-async function deleteRemoteFolderItem({ settings, folderPath, itemPath }) {
-  const root = parseWebDavVirtualPath(folderPath);
-  const targetPath = assertInsideRemoteFolder(root, parseWebDavVirtualPath(itemPath));
-  await webDavRequest(settings, "DELETE", targetPath);
-  return {
-    deletedPath: createWebDavVirtualPath(targetPath),
-    folder: await refreshRemoteMarkdownFolder(settings, folderPath)
-  };
-}
-function showRemoteFolderItem(settings, itemPath) {
-  const remotePath = parseWebDavVirtualPath(itemPath);
-  shell.openExternal(createWebDavResourceUrl(settings, remotePath));
-  return { ok: true };
-}
-async function saveRemoteMarkdownFile(settings, filePath, content) {
-  const remotePath = parseWebDavVirtualPath(filePath);
-  await webDavRequest(settings, "PUT", remotePath, content, {
-    "Content-Type": "text/markdown; charset=utf-8"
-  });
-  return {
-    canceled: false,
-    filePath: createWebDavVirtualPath(remotePath),
-    fileName: path.basename(remotePath),
-    file: null
-  };
-}
-async function ensureWebDavDirectory(settings, remoteDir) {
-  const parts = trimSlashes(remoteDir).split("/").filter(Boolean);
-  let current = "";
-  for (const part of parts) {
-    current = joinKey(current, part);
-    try {
-      await webDavRequest(settings, "MKCOL", current);
-    } catch (error) {
-      if (!String(error.message).includes("HTTP 405")) throw error;
-    }
-  }
-}
-async function uploadImageToWebDav(settings, imageBuffer, imageSavePath, imageName, contentType) {
-  const webdav = settings.webdav || {};
-  const remoteImagePath = normalizeRemoteImagePath(imageSavePath, webdav);
-  const remoteDir = joinKey(webdav.remotePath || "/", remoteImagePath);
-  const remotePath = joinKey(remoteDir, imageName);
-  await ensureWebDavDirectory(settings, remoteDir);
-  await webDavRequest(settings, "PUT", remotePath, imageBuffer, {
-    "Content-Type": contentType
-  });
-  return {
-    markdownPath: createWebDavPublicUrl(settings, remotePath),
-    cleanup: {
-      type: "webdav",
-      remotePath
-    }
   };
 }
 function hmac(key, value, encoding) {
@@ -1058,9 +660,6 @@ async function uploadImageToS3(settings, imageBuffer, imageSavePath, imageName, 
   };
 }
 async function uploadImageToRemote(settings, imageBuffer, imageSavePath, imageName, contentType) {
-  if (settings?.syncProvider === "webdav" && hasWebDavConfig(settings)) {
-    return uploadImageToWebDav(settings, imageBuffer, imageSavePath, imageName, contentType);
-  }
   if (settings?.syncProvider === "s3" && hasS3Config(settings)) {
     return uploadImageToS3(settings, imageBuffer, imageSavePath, imageName, contentType);
   }
@@ -1172,11 +771,6 @@ async function deleteInsertedImage(image, syncSettings) {
     await fs.rm(image.filePath, { force: true });
     return;
   }
-  if (image.type === "webdav" && image.remotePath) {
-    if (!hasWebDavConfig(imageSyncSettings)) throw new Error("缺少 WebDAV 配置");
-    await webDavRequest(imageSyncSettings, "DELETE", image.remotePath);
-    return;
-  }
   if (image.type === "s3" && image.key) {
     if (!hasS3Config(imageSyncSettings)) throw new Error("缺少 S3 配置");
     await s3Request(imageSyncSettings, "DELETE", createS3Url(imageSyncSettings, image.key));
@@ -1214,19 +808,6 @@ async function copyImageToClipboard(source) {
   return { ok: true };
 }
 async function testSyncConnection({ provider, settings }) {
-  if (provider === "webdav") {
-    if (!hasWebDavConfig(settings)) throw new Error("请先填写 WebDAV 服务器地址");
-    await webDavRequest(settings, "PROPFIND", "/", null, {
-      Depth: "0"
-    });
-    if (trimSlashes(settings.webdav.remotePath || "")) {
-      await ensureWebDavDirectory(settings, settings.webdav.remotePath);
-      await webDavRequest(settings, "PROPFIND", settings.webdav.remotePath, null, {
-        Depth: "0"
-      });
-    }
-    return { ok: true };
-  }
   if (provider === "s3") {
     if (!hasS3Config(settings)) throw new Error("请先填写完整的 S3 连接信息");
     const prefix = settings.s3.prefix ? `&prefix=${encodeURIComponent(settings.s3.prefix)}` : "";
@@ -1244,40 +825,13 @@ ipcMain.handle("document:get-initial-file", async () => {
 });
 ipcMain.handle("document:open", (_event, filePath) => openMarkdownFile(filePath));
 ipcMain.handle("document:open-folder", () => openMarkdownFolder());
-ipcMain.handle(
-  "document:open-remote",
-  (_event, { filePath, settings }) => readRemoteMarkdownFile(settings, filePath)
-);
-ipcMain.handle("document:open-remote-folder", (_event, settings) => openRemoteMarkdownFolder(settings));
 ipcMain.handle("document:refresh-folder", (_event, folderPath) => refreshMarkdownFolder(folderPath));
-ipcMain.handle(
-  "document:refresh-remote-folder",
-  (_event, { settings, folderPath }) => refreshRemoteMarkdownFolder(settings, folderPath)
-);
 ipcMain.handle("document:create-in-folder", (_event, options) => createMarkdownFileInFolder(options));
 ipcMain.handle("document:create-folder-in-folder", (_event, options) => createFolderInFolder(options));
 ipcMain.handle("document:rename-folder-item", (_event, options) => renameFolderItem(options));
 ipcMain.handle("document:duplicate-folder-file", (_event, options) => duplicateMarkdownFile(options));
 ipcMain.handle("document:delete-folder-item", (_event, options) => deleteFolderItem(options));
 ipcMain.handle("document:show-folder-item", (_event, itemPath) => showFolderItem(itemPath));
-ipcMain.handle(
-  "document:create-remote-in-folder",
-  (_event, options) => createRemoteMarkdownFileInFolder(options)
-);
-ipcMain.handle(
-  "document:create-remote-folder-in-folder",
-  (_event, options) => createRemoteFolderInFolder(options)
-);
-ipcMain.handle("document:rename-remote-folder-item", (_event, options) => renameRemoteFolderItem(options));
-ipcMain.handle(
-  "document:duplicate-remote-folder-file",
-  (_event, options) => duplicateRemoteMarkdownFile(options)
-);
-ipcMain.handle("document:delete-remote-folder-item", (_event, options) => deleteRemoteFolderItem(options));
-ipcMain.handle(
-  "document:show-remote-folder-item",
-  (_event, { settings, itemPath }) => showRemoteFolderItem(settings, itemPath)
-);
 ipcMain.handle("document:create", (_event, folderPath) => createMarkdownFile(folderPath));
 ipcMain.handle(
   "document:save",
@@ -1286,10 +840,6 @@ ipcMain.handle(
 ipcMain.handle(
   "document:save-as",
   (_event, { content, defaultFolderPath }) => saveMarkdownFileAs(content, defaultFolderPath)
-);
-ipcMain.handle(
-  "document:save-remote",
-  (_event, { settings, filePath, content }) => saveRemoteMarkdownFile(settings, filePath, content)
 );
 ipcMain.handle("document:export", (_event, options) => exportMarkdownDocument(options));
 ipcMain.handle("document:save-clipboard-image", (_event, options) => saveClipboardImage(options));
@@ -1300,7 +850,7 @@ ipcMain.handle("clipboard:copy-image", (_event, source) => copyImageToClipboard(
 ipcMain.handle("sync:test-connection", (_event, options) => testSyncConnection(options));
 ipcMain.handle(
   "document:asset-url",
-  (_event, { markdownFilePath, source, syncSettings }) => resolveImageAssetUrl(markdownFilePath, source, syncSettings)
+  (_event, { markdownFilePath, source, syncSettings }) => resolveImageAssetUrl(markdownFilePath, source)
 );
 ipcMain.handle("dialog:choose-folder", async (_event, title = "选择文件夹") => {
   const result = await dialog.showOpenDialog(mainWindow, {

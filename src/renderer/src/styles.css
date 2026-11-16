@@ -538,6 +538,7 @@ button {
 }
 
 .editor-pane {
+  position: relative;
   display: grid;
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
@@ -560,70 +561,23 @@ button {
   background: color-mix(in srgb, var(--app-bg) 94%, #ffffff);
 }
 
-.file-sidebar.outline-only {
-  grid-template-rows: auto minmax(0, 1fr);
-}
-
 .file-sidebar-header {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px 9px;
+  gap: 0;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--app-bg) 96%, #ffffff);
-}
-
-.file-sidebar.outline-only .file-sidebar-header {
-  min-height: 48px;
-  justify-content: center;
-  padding-top: 0;
-  padding-bottom: 0;
-}
-
-.file-sidebar-tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  min-height: 26px;
-}
-
-.file-sidebar.outline-only .file-sidebar-tabs {
-  grid-template-columns: 1fr;
-}
-
-.file-sidebar-tab {
-  position: relative;
-  height: 27px;
-  background: transparent;
-  color: var(--heading);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
-  text-align: center;
-}
-
-.file-sidebar-tab:not(.active) {
-  color: var(--soft);
-  font-weight: 400;
-}
-
-.file-sidebar-tab.active::after {
-  position: absolute;
-  right: 12px;
-  bottom: 0;
-  left: 12px;
-  height: 2px;
-  background: var(--heading);
-  content: "";
 }
 
 .file-sidebar-search {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 42px;
+  height: 54px;
   padding: 0 12px;
   border: 1px solid color-mix(in srgb, var(--border-strong) 72%, var(--border));
-  border-radius: 16px;
+  border-radius: 17px;
   background: color-mix(in srgb, var(--control-active) 78%, transparent);
   color: var(--soft);
 }
@@ -650,7 +604,7 @@ button {
   outline: 0;
   background: transparent;
   color: var(--text);
-  font-size: 16px;
+  font-size: 18px;
 }
 
 .file-sidebar-search input::placeholder {
@@ -749,13 +703,13 @@ button {
 .folder-root,
 .folder-directory {
   display: flex;
-  min-height: 40px;
+  min-height: 48px;
   align-items: center;
   gap: 8px;
   margin: 1px 0;
   padding: 7px 8px;
   color: color-mix(in srgb, var(--text) 76%, var(--muted));
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 500;
 }
 
@@ -766,7 +720,7 @@ button {
 
 .folder-file {
   display: block;
-  min-height: 42px;
+  min-height: 48px;
   margin: 1px 0;
   padding: 7px 8px 7px 10px;
 }
@@ -845,7 +799,7 @@ button {
   min-width: 0;
   flex: 1;
   white-space: nowrap;
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1.25;
 }
 
@@ -870,6 +824,90 @@ button {
   font-size: 11.5px;
   line-height: 1.25;
   white-space: nowrap;
+}
+
+.editor-outline-float {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  z-index: 24;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  pointer-events: auto;
+}
+
+.editor-outline-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 76%, var(--border));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--control-active) 88%, transparent);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.editor-outline-toggle:hover,
+.editor-outline-toggle[aria-expanded="true"] {
+  background: var(--control-active);
+  color: var(--text);
+}
+
+.editor-outline-toggle-icon {
+  color: var(--soft);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.editor-outline-panel {
+  width: min(280px, calc(100vw - 48px));
+  max-height: min(62vh, 520px);
+  margin-top: 6px;
+  padding: 6px 0;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 72%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--control-active) 96%, transparent);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.16), 0 2px 7px rgba(0, 0, 0, 0.08);
+}
+
+.editor-outline-item {
+  display: block;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 12px;
+  overflow: hidden;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.editor-outline-item:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.editor-outline-item.level-2 {
+  padding-left: 25px;
+}
+
+.editor-outline-item.level-3 {
+  padding-left: 38px;
+}
+
+.editor-outline-item.level-4,
+.editor-outline-item.level-5,
+.editor-outline-item.level-6 {
+  padding-left: 51px;
 }
 
 .file-sidebar-footer {

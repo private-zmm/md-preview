@@ -64,7 +64,7 @@ const pendingInsertedImages = ref([])
 const { isDirty, title, wordCount, setDocument, markSaved } = useDocumentState(state)
 const { html, render } = useMarkdownRenderer(api)
 
-const hasSidebar = computed(() => Boolean(folderName.value || currentOutline.value.length > 0))
+const hasSidebar = computed(() => Boolean(folderName.value))
 const workspaceClass = computed(() => `workspace ${hasSidebar.value ? 'has-sidebar' : ''}`)
 const workspaceStyle = computed(() => ({ '--sidebar-width': `${sidebarWidth.value}px` }))
 const assetBasePath = computed(() => state.filePath || folderPath.value || null)
@@ -268,10 +268,6 @@ function setTheme(theme) {
 
 function runEditorCommand(command) {
   editorPaneRef.value?.runCommand(command)
-}
-
-function handleOutlineSelect(item) {
-  editorPaneRef.value?.scrollToOutline(item)
 }
 
 function registerPendingImage(image) {
@@ -844,13 +840,10 @@ watch(isDirty, (dirty) => api?.setDocumentEdited(dirty), { immediate: true })
         :folder-name="folderName"
         :folder-path="folderPath"
         :files="folderFiles"
-        :outline="currentOutline"
         :active-file-path="state.filePath"
-        :show-files="Boolean(folderName)"
         @create-file="createFile"
         @open-file="openFile"
         @folder-action="handleFolderAction"
-        @select-outline="handleOutlineSelect"
         @resize-start="startSidebarResize"
       />
       <VditorEditorPane
@@ -861,6 +854,7 @@ watch(isDirty, (dirty) => api?.setDocumentEdited(dirty), { immediate: true })
         :default-folder-path="folderPath"
         :image-save-path="activeImageConfig.imageSavePath"
         :sync-settings="activeImageConfig.syncSettings"
+        :outline="currentOutline"
         :theme="state.theme"
         @status="setStatus"
         @image-inserted="registerPendingImage"
