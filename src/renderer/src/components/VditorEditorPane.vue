@@ -383,7 +383,6 @@ function toggleOutline() {
 
 function selectOutline(item) {
   scrollToOutline(item)
-  closeOutline()
 }
 
 function runCommand(command) {
