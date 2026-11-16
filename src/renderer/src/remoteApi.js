@@ -267,6 +267,11 @@ export function createRemoteApi(localApi) {
     return response.json()
   }
 
+  async function searchDocuments(text) {
+    const response = await request(`/api/search?q=${encodeURIComponent(String(text || ''))}`)
+    return response.json()
+  }
+
   async function saveAdminSettings(settings) {
     const response = await request('/api/admin/settings', {
       method: 'PUT',
@@ -329,6 +334,7 @@ export function createRemoteApi(localApi) {
     },
     importMarkdownFolder,
     getAdminSettings,
+    searchDocuments,
     saveAdminSettings,
     createBackup,
     async resolveAssetUrl(markdownFilePath, source, syncSettings) {

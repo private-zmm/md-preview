@@ -45,6 +45,7 @@ const statusText = ref('Ready')
 const folderPath = ref('')
 const folderName = ref('')
 const folderFiles = ref([])
+const sidebarSearchResultPaths = ref(null)
 const isUnsavedDialogOpen = ref(false)
 const isInputDialogOpen = ref(false)
 const isSettingsOpen = ref(false)
@@ -96,6 +97,8 @@ let unsavedDialogResolver = null
 let inputDialogResolver = null
 let notificationTimer = null
 let stopSidebarResize = null
+let sidebarSearchTimer = null
+let sidebarSearchToken = 0
 
 function loadSidebarWidth() {
   const saved = Number.parseInt(localStorage.getItem('mdpreview-sidebar-width') || '', 10)
@@ -126,6 +129,32 @@ function startSidebarResize(event) {
   window.addEventListener('pointermove', handleMove)
   window.addEventListener('pointerup', stop)
   window.addEventListener('pointercancel', stop)
+}
+
+async function handleSidebarSearch(query) {
+  const text = String(query || '').trim()
+  sidebarSearchToken += 1
+  const token = sidebarSearchToken
+  window.clearTimeout(sidebarSearchTimer)
+
+  if (!text || !api.isServerMode?.() || typeof api.searchDocuments !== 'function') {
+    sidebarSearchResultPaths.value = null
+    return
+  }
+
+  sidebarSearchResultPaths.value = null
+
+  sidebarSearchTimer = window.setTimeout(async () => {
+    try {
+      const result = await api.searchDocuments(text)
+      if (token !== sidebarSearchToken) return
+      sidebarSearchResultPaths.value = (result.documents || []).map((document) => `server://document/${document.id}`)
+    } catch (error) {
+      if (token !== sidebarSearchToken) return
+      sidebarSearchResultPaths.value = []
+      setStatus(`搜索失败：${error.message}`)
+    }
+  }, 180)
 }
 
 function loadSettings() {
@@ -789,6 +818,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopSidebarResize?.()
+  window.clearTimeout(sidebarSearchTimer)
   removeOpenListener?.()
   removeCloseListener?.()
   window.clearTimeout(notificationTimer)
@@ -840,11 +870,13 @@ watch(isDirty, (dirty) => api?.setDocumentEdited(dirty), { immediate: true })
         :folder-name="folderName"
         :folder-path="folderPath"
         :files="folderFiles"
+        :search-result-paths="sidebarSearchResultPaths"
         :active-file-path="state.filePath"
         @create-file="createFile"
         @open-file="openFile"
         @folder-action="handleFolderAction"
         @resize-start="startSidebarResize"
+        @search="handleSidebarSearch"
       />
       <VditorEditorPane
         ref="editorPaneRef"

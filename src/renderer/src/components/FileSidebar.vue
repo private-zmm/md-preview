@@ -14,21 +14,26 @@ const props = defineProps({
     type: Array,
     default: () => []
   },
+  searchResultPaths: {
+    type: Array,
+    default: null
+  },
   activeFilePath: {
     type: String,
     default: null
   }
 })
 
-const emit = defineEmits(['create-file', 'open-file', 'folder-action', 'resize-start'])
+const emit = defineEmits(['create-file', 'open-file', 'folder-action', 'resize-start', 'search'])
 const expandedDirs = ref(new Set())
 const rootExpanded = ref(true)
 const searchQuery = ref('')
 const sidebarLabel = 'Markdown 文件夹'
+const showRoot = computed(() => Boolean(props.folderName && props.folderPath !== 'server://workspace'))
 const footerName = computed(() => props.folderName || '当前文件')
 const markdownFileCount = computed(() => props.files.filter((file) => file.type !== 'directory').length)
 const fileTree = computed(() => buildFileTree(props.files))
-const displayFileTree = computed(() => filterFileTree(fileTree.value, searchQuery.value))
+const displayFileTree = computed(() => filterFileTree(fileTree.value, searchQuery.value, props.searchResultPaths))
 const visibleFileNodes = computed(() => (rootExpanded.value ? flattenVisibleNodes(displayFileTree.value) : []))
 const contextMenu = ref({
   visible: false,
@@ -111,20 +116,26 @@ function buildFileTree(files) {
   return normalizeNode(root)
 }
 
-function filterFileTree(nodes, query) {
+function filterFileTree(nodes, query, searchResultPaths = null) {
   const normalizedQuery = String(query || '').trim().toLocaleLowerCase()
   if (!normalizedQuery) return nodes
+  const resultPaths = searchResultPaths instanceof Set
+    ? searchResultPaths
+    : Array.isArray(searchResultPaths)
+      ? new Set(searchResultPaths)
+      : null
 
   return nodes.reduce((matches, node) => {
     if (node.type === 'directory') {
-      const children = filterFileTree(node.children, normalizedQuery)
+      const children = filterFileTree(node.children, normalizedQuery, resultPaths ? [...resultPaths] : null)
       if (children.length > 0) matches.push({ ...node, children })
       return matches
     }
 
     const file = node.file
-    const searchable = `${file.fileName || ''} ${file.relativePath || ''}`.toLocaleLowerCase()
-    if (searchable.includes(normalizedQuery)) matches.push(node)
+    const searchable = `${file.fileName || ''} ${file.relativePath || ''} ${file.searchText || ''} ${file.summary || ''}`.toLocaleLowerCase()
+    const matchedByServerSearch = resultPaths ? resultPaths.has(file.filePath) : false
+    if (matchedByServerSearch || (!resultPaths && searchable.includes(normalizedQuery))) matches.push(node)
     return matches
   }, [])
 }
@@ -197,6 +208,8 @@ watch(
   }
 )
 
+watch(searchQuery, (query) => emit('search', query))
+
 function closeContextMenu() {
   contextMenu.value.visible = false
 }
@@ -264,7 +277,7 @@ onUnmounted(() => {
     </header>
 
     <div class="file-sidebar-list" @contextmenu="openContextMenu($event)">
-      <button v-if="folderName" class="folder-root" type="button" :title="folderPath || folderName" @click="rootExpanded = !rootExpanded">
+      <button v-if="showRoot" class="folder-root" type="button" :title="folderPath || folderName" @click="rootExpanded = !rootExpanded">
         <svg class="tree-chevron" :class="{ expanded: rootExpanded }" viewBox="0 0 16 16" aria-hidden="true">
           <path d="m4 6 4 4 4-4"></path>
         </svg>

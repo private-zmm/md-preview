@@ -238,13 +238,29 @@ app.get('/api/assets/:id', { preHandler: authRequired }, async (request, reply) 
 app.get('/api/search', { preHandler: authRequired }, async (request) => {
   const text = String(request.query?.q || '').trim()
   if (!text) return { documents: [] }
+  const normalizedText = text.toLocaleLowerCase()
   const result = await query(
-    `SELECT id, title, relative_path, version, updated_at FROM documents
-     WHERE user_id = $1 AND (title ILIKE $2 OR relative_path ILIKE $2)
-     ORDER BY updated_at DESC LIMIT 100`,
-    [request.user.sub, `%${text}%`]
+    `SELECT id, title, relative_path, content_path, version, updated_at FROM documents
+     WHERE user_id = $1
+     ORDER BY updated_at DESC`,
+    [request.user.sub]
   )
-  return { documents: result.rows }
+  const documents = []
+  for (const document of result.rows) {
+    const metadata = `${document.title} ${document.relative_path}`.toLocaleLowerCase()
+    let content = ''
+    try {
+      content = await fs.readFile(document.content_path, 'utf8')
+    } catch {
+      // A missing content file is handled by the document endpoint.
+    }
+    if (metadata.includes(normalizedText) || content.toLocaleLowerCase().includes(normalizedText)) {
+      const { content_path: _contentPath, ...publicDocument } = document
+      documents.push(publicDocument)
+      if (documents.length >= 100) break
+    }
+  }
+  return { documents }
 })
 
 app.post('/api/embeddings/rebuild', { preHandler: authRequired }, async (request, reply) => {

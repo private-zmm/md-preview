@@ -673,6 +673,44 @@ button {
   background: color-mix(in srgb, var(--soft) 62%, transparent);
 }
 
+.vditor-editor .vditor-wysiwyg,
+.vditor-editor .vditor-ir,
+.vditor-editor .vditor-sv,
+.editor-outline-panel {
+  scrollbar-color: color-mix(in srgb, var(--soft) 34%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+.vditor-editor .vditor-wysiwyg::-webkit-scrollbar,
+.vditor-editor .vditor-ir::-webkit-scrollbar,
+.vditor-editor .vditor-sv::-webkit-scrollbar,
+.editor-outline-panel::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.vditor-editor .vditor-wysiwyg::-webkit-scrollbar-track,
+.vditor-editor .vditor-ir::-webkit-scrollbar-track,
+.vditor-editor .vditor-sv::-webkit-scrollbar-track,
+.editor-outline-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.vditor-editor .vditor-wysiwyg::-webkit-scrollbar-thumb,
+.vditor-editor .vditor-ir::-webkit-scrollbar-thumb,
+.vditor-editor .vditor-sv::-webkit-scrollbar-thumb,
+.editor-outline-panel::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--soft) 34%, transparent);
+}
+
+.vditor-editor .vditor-wysiwyg::-webkit-scrollbar-thumb:hover,
+.vditor-editor .vditor-ir::-webkit-scrollbar-thumb:hover,
+.vditor-editor .vditor-sv::-webkit-scrollbar-thumb:hover,
+.editor-outline-panel::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--soft) 52%, transparent);
+}
+
 .file-sidebar-resize-handle {
   position: absolute;
   top: 0;

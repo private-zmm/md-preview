@@ -75,6 +75,7 @@ function makeFileEntry(filePath, file, rootPath = '') {
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 50),
+    searchText: content,
     relativePath: rootPath || file.name
   }))
 }
