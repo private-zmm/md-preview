@@ -208,7 +208,48 @@ export function createRemoteApi(localApi) {
     return {
       oldPath: options.itemPath,
       newPath,
-      file: { type: 'file', filePath: newPath, fileName: document.title, relativePath: document.title },
+      file: { type: 'file', filePath: newPath, fileName: document.title, relativePath: document.relativePath || document.title },
+      folder: await openServerMarkdownFolder()
+    }
+  }
+
+  async function moveServerFolderItem(options) {
+    const isDirectory = options.file?.type === 'directory' || options.itemType === 'directory'
+    if (isDirectory) {
+      const fromPath = serverRelativePathFromPath(options.itemPath)
+      const toPath = serverRelativePathFromPath(options.targetDirPath)
+      await request('/api/documents/folder/move', {
+        method: 'PUT',
+        body: JSON.stringify({ fromPath, toPath })
+      })
+      const folderName = fromPath.split('/').pop()
+      const newPath = toPath ? `server://workspace\\${toPath}\\${folderName}` : `server://workspace\\${folderName}`
+      return {
+        oldPath: options.itemPath,
+        newPath,
+        folder: await openServerMarkdownFolder(),
+        file: null
+      }
+    }
+
+    const documentId = documentIdFromPath(options.itemPath)
+    if (!documentId) throw new Error('无法识别服务器文档')
+    const sourceRelativePath = String(options.file?.relativePath || options.file?.fileName || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
+    const fileName = sourceRelativePath.split('/').pop()
+    if (!fileName) throw new Error('无法识别服务器文档名称')
+    const targetDir = serverRelativePathFromPath(options.targetDirPath)
+    const relativePath = targetDir ? `${targetDir}/${fileName}` : fileName
+    const response = await request(`/api/documents/${documentId}/move`, {
+      method: 'PUT',
+      body: JSON.stringify({ relativePath })
+    })
+    const document = await response.json()
+    const newPath = serverPathForDocument(document.id)
+    const opened = await openServerMarkdownFile(newPath)
+    return {
+      oldPath: options.itemPath,
+      newPath,
+      file: opened,
       folder: await openServerMarkdownFolder()
     }
   }
@@ -317,6 +358,7 @@ export function createRemoteApi(localApi) {
     saveServerMarkdownFileAs,
     createServerMarkdownFileInFolder,
     renameServerFolderItem,
+    moveServerFolderItem,
     duplicateServerFolderFile,
     deleteServerFolderItem,
     resolveServerAssetUrl,
@@ -359,6 +401,11 @@ export function createRemoteApi(localApi) {
     },
     async renameFolderItem(options) {
       return isServerMode() ? renameServerFolderItem(options) : localApi.renameFolderItem(options)
+    },
+    async moveFolderItem(options) {
+      if (isServerMode()) return moveServerFolderItem(options)
+      if (typeof localApi.moveFolderItem !== 'function') throw new Error('当前运行环境不支持移动文件')
+      return localApi.moveFolderItem(options)
     },
     async duplicateFolderFile(options) {
       return isServerMode() ? duplicateServerFolderFile(options) : localApi.duplicateFolderFile(options)

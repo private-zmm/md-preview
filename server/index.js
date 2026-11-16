@@ -86,6 +86,16 @@ function normalizeImportedPath(value) {
   return parts.join('/')
 }
 
+function normalizeMovePath(value, { allowEmpty = false } = {}) {
+  const raw = String(value || '').replace(/\\/g, '/').trim()
+  if (!raw && allowEmpty) return ''
+  if (!raw || raw.startsWith('/') || /^[A-Za-z]:[\\/]/.test(raw)) throw new Error('目标路径必须是当前工作区内的相对路径')
+
+  const parts = raw.split('/').filter(Boolean)
+  if (parts.some((part) => part === '.' || part === '..')) throw new Error('目标路径不能包含 . 或 ..')
+  return parts.join('/')
+}
+
 app.post('/api/documents/import', { preHandler: authRequired }, async (request, reply) => {
   const imported = []
   let manifest = []
@@ -167,6 +177,37 @@ app.put('/api/documents/:id', { preHandler: authRequired }, async (request, repl
   return updated.rows[0]
 })
 
+app.put('/api/documents/:id/move', { preHandler: authRequired }, async (request, reply) => {
+  let relativePath
+  try {
+    relativePath = normalizeMovePath(request.body?.relativePath)
+  } catch (error) {
+    return reply.code(400).send({ error: error.message })
+  }
+  if (!/\.(md|markdown|mdown|mkd)$/i.test(relativePath)) {
+    return reply.code(400).send({ error: '目标路径必须是 Markdown 文件路径' })
+  }
+
+  const result = await query('SELECT * FROM documents WHERE id = $1 AND user_id = $2', [request.params.id, request.user.sub])
+  const document = result.rows[0]
+  if (!document) return reply.code(404).send({ error: '文档不存在' })
+  if (document.relative_path === relativePath) return reply.code(400).send({ error: '目标位置与当前相同' })
+
+  const conflict = await query(
+    'SELECT id FROM documents WHERE user_id = $1 AND relative_path = $2 AND id <> $3',
+    [request.user.sub, relativePath, document.id]
+  )
+  if (conflict.rows[0]) return reply.code(409).send({ error: '目标位置已存在同名文件' })
+
+  const title = path.posix.basename(relativePath)
+  const updated = await query(
+    `UPDATE documents SET title = $1, relative_path = $2, updated_at = NOW()
+     WHERE id = $3 RETURNING id, title, relative_path, version, updated_at`,
+    [title, relativePath, document.id]
+  )
+  return updated.rows[0]
+})
+
 app.post('/api/documents/:id/duplicate', { preHandler: authRequired }, async (request, reply) => {
   const result = await query('SELECT * FROM documents WHERE id = $1 AND user_id = $2', [request.params.id, request.user.sub])
   const source = result.rows[0]
@@ -195,6 +236,53 @@ app.delete('/api/documents/folder', { preHandler: authRequired }, async (request
   )
   await Promise.all(result.rows.map((document) => deleteDocumentFile(document.content_path)))
   return { ok: true, count: result.rowCount }
+})
+
+app.put('/api/documents/folder/move', { preHandler: authRequired }, async (request, reply) => {
+  let fromPath
+  let toPath
+  try {
+    fromPath = normalizeMovePath(request.body?.fromPath)
+    toPath = normalizeMovePath(request.body?.toPath, { allowEmpty: true })
+  } catch (error) {
+    return reply.code(400).send({ error: error.message })
+  }
+  if (!fromPath) return reply.code(400).send({ error: '源文件夹路径不能为空' })
+  const sourceParentPath = fromPath.includes('/') ? fromPath.slice(0, fromPath.lastIndexOf('/')) : ''
+  if (toPath === sourceParentPath) return reply.code(400).send({ error: '目标位置与当前相同' })
+  if (toPath.startsWith(`${fromPath}/`)) return reply.code(400).send({ error: '不能移动到自身或子文件夹内' })
+
+  const sourceResult = await query(
+    `SELECT id, relative_path FROM documents
+     WHERE user_id = $1 AND (relative_path = $2 OR relative_path LIKE $3 ESCAPE '\\')`,
+    [request.user.sub, fromPath, `${fromPath.replace(/[\\%_]/g, '\\$&')}/%`]
+  )
+  if (sourceResult.rows.length === 0) return reply.code(404).send({ error: '文件夹不存在或为空' })
+
+  const movingIds = new Set(sourceResult.rows.map((row) => row.id))
+  const destinationRoot = toPath ? `${toPath}/${path.posix.basename(fromPath)}` : path.posix.basename(fromPath)
+  const destinations = sourceResult.rows.map((row) => {
+    const suffix = row.relative_path === fromPath ? '' : row.relative_path.slice(fromPath.length + 1)
+    return suffix ? `${destinationRoot}/${suffix}` : destinationRoot
+  })
+  const duplicateDestination = destinations.find((value, index) => destinations.indexOf(value) !== index)
+  if (duplicateDestination) return reply.code(409).send({ error: '目标位置存在重复文件' })
+
+  for (const destination of destinations) {
+    const conflict = await query(
+      'SELECT id FROM documents WHERE user_id = $1 AND relative_path = $2',
+      [request.user.sub, destination]
+    )
+    if (conflict.rows[0] && !movingIds.has(conflict.rows[0].id)) {
+      return reply.code(409).send({ error: '目标位置已存在同名文件' })
+    }
+  }
+
+  for (const [index, row] of sourceResult.rows.entries()) {
+    await query('UPDATE documents SET relative_path = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3', [destinations[index], row.id, request.user.sub])
+  }
+
+  return { ok: true, count: sourceResult.rows.length }
 })
 
 app.delete('/api/documents/:id', { preHandler: authRequired }, async (request, reply) => {

@@ -540,6 +540,36 @@ function getFolderActionDir(file) {
   return file.filePath.split(/[\\/]/).slice(0, -1).join('\\') || folderPath.value
 }
 
+function getMoveTargetDir(file) {
+  const currentDir = getFolderActionDir(file)
+  if (file?.type !== 'directory') return currentDir
+
+  const normalized = String(currentDir || '').replace(/\\/g, '/').replace(/\/$/, '')
+  const root = String(folderPath.value || '').replace(/\\/g, '/').replace(/\/$/, '')
+  if (!normalized || normalized === root) return folderPath.value
+  const parent = normalized.slice(0, normalized.lastIndexOf('/'))
+  if (!parent || parent.length < root.length) return folderPath.value
+  if (folderPath.value === 'server://workspace' && parent === 'server://workspace') return folderPath.value
+  return parent.replace(/\//g, '\\')
+}
+
+function folderRelativePath(targetPath) {
+  const root = String(folderPath.value || '').replace(/\\/g, '/').replace(/\/$/, '')
+  const target = String(targetPath || '').replace(/\\/g, '/').replace(/\/$/, '')
+  if (!target || target === root) return ''
+  if (target.startsWith(`${root}/`)) return target.slice(root.length + 1)
+  if (folderPath.value === 'server://workspace') return target.replace(/^server:\/\/workspace\/?/, '')
+  return target
+}
+
+function resolveMoveTargetDir(value) {
+  const input = String(value || '').trim().replace(/\\/g, '/')
+  if (!input || input === '.') return folderPath.value
+  if (folderPath.value === 'server://workspace') return `server://workspace\\${input.replace(/^\/+|\/+$/g, '')}`
+  if (/^[A-Za-z]:\//.test(input) || input.startsWith('/')) return input.replace(/\//g, '\\')
+  return `${String(folderPath.value).replace(/[\\/]$/, '')}\\${input.replace(/^\/+|\/+$/g, '').replace(/\//g, '\\')}`
+}
+
 function requestInputName(title, defaultValue = '') {
   inputDialog.value = {
     title,
@@ -632,6 +662,27 @@ async function handleFolderAction({ action, file }) {
         })
         setStatus(`已重命名为 ${newName}`)
       }
+      return
+    }
+
+    if (action === 'move') {
+      const defaultTarget = folderRelativePath(getMoveTargetDir(file)) || '.'
+      const targetInput = await requestInputName('移动到目录（相对当前文件夹）', defaultTarget)
+      if (!targetInput) return
+
+      const result = await api.moveFolderItem({
+        folderPath: folderPath.value,
+        itemPath: file.filePath,
+        targetDirPath: resolveMoveTargetDir(targetInput),
+        file
+      })
+      applyFolderResult(result.folder)
+      if (state.filePath === result.oldPath && result.file) {
+        loadDocument(result.file)
+      } else if (file.type === 'directory' && isSameOrChildPath(result.oldPath, state.filePath)) {
+        loadDocument({ filePath: null, fileName: 'Untitled.md', content: '' })
+      }
+      setStatus(`已移动 ${file.fileName}`)
       return
     }
 

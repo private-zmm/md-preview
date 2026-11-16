@@ -47,6 +47,7 @@ const menuItems = [
   { label: '新建文件夹', action: 'new-folder' },
   { separator: true },
   { label: '重命名', action: 'rename', needsTarget: true },
+  { label: '移动到目录…', action: 'move', needsTarget: true },
   { label: '创建副本', action: 'duplicate', needsTarget: true, needsMarkdown: true },
   { label: '删除', action: 'delete', needsTarget: true, danger: true },
   { separator: true },
@@ -219,7 +220,7 @@ function openContextMenu(event, file = null) {
   contextMenu.value = {
     visible: true,
     x: Math.min(event.clientX, window.innerWidth - 150),
-    y: Math.min(event.clientY, window.innerHeight - 232),
+    y: Math.min(event.clientY, window.innerHeight - 268),
     file
   }
 }
