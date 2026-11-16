@@ -80,7 +80,7 @@ npm run build
 
 ### 浏览器版
 
-浏览器版使用本地 Web API 运行，不依赖 Electron。首次使用时可以打开 Markdown 文件或文件夹，保存会下载 Markdown 文件；图片可以以内嵌数据保存。浏览器版目前不包含桌面文件关联、WebDAV 和 PDF/PNG 导出。
+浏览器版使用本地 Web API 运行，不依赖 Electron。首次使用时可以打开 Markdown 文件或文件夹，保存会下载 Markdown 文件；图片可以以内嵌数据保存。浏览器版目前不包含桌面文件关联和 PDF/PNG 导出。
 
 ```bash
 # 开发模式，默认访问 http://localhost:5173
@@ -114,6 +114,7 @@ docker compose up -d --build
 POST /api/auth/login
 GET  /api/documents
 POST /api/documents
+POST /api/documents/import
 PUT  /api/documents/:id
 POST /api/documents/:id/assets
 GET  /api/search
@@ -121,6 +122,61 @@ GET  /api/backups
 POST /api/backups/create
 POST /api/backups/:id/restore
 ```
+
+连接服务器后，在文件菜单选择“上传文件夹到服务器”，选择本地文件夹即可批量导入其中的 `.md`、`.markdown`、`.mdown` 和 `.mkd` 文件。相对目录会保留；再次上传同一路径会更新原文档。
+
+### S3 / MinIO 定时备份
+
+服务端会按 `BACKUP_SCHEDULE` 定时创建 PostgreSQL dump 和文档/图片压缩包。配置 S3 兼容存储后，会自动上传到对象存储。MinIO 示例：
+
+```env
+BACKUP_ENABLED=true
+BACKUP_SCHEDULE=0 3 * * *
+BACKUP_S3_ENDPOINT=http://minio.example.com:9000
+BACKUP_S3_REGION=us-east-1
+BACKUP_S3_BUCKET=mdpreview-backups
+BACKUP_S3_ACCESS_KEY=minio-access-key
+BACKUP_S3_SECRET_KEY=minio-secret-key
+BACKUP_S3_PREFIX=mdpreview/backups
+```
+
+先在 MinIO 中创建对应 bucket，再重启服务：
+
+```bash
+docker compose up -d --build
+```
+
+也可以由管理员立即执行一次备份：
+
+```text
+POST /api/backups/create
+```
+
+`BACKUP_S3_ENDPOINT` 有值时服务端会使用兼容 MinIO 的 Path Style 请求。备份记录可通过 `GET /api/backups` 查看，恢复接口会优先读取本地备份，找不到时从 S3 下载。
+
+### MCP Server
+
+服务端提供带鉴权的 MCP HTTP 接口：
+
+```text
+POST /mcp
+```
+
+在 `.env` 中配置长期 MCP Key：
+
+```env
+MCP_API_KEY=一串长随机字符串
+MCP_USER_EMAIL=admin@example.com
+```
+
+Agent 请求时使用：
+
+```http
+Authorization: Bearer 一串长随机字符串
+Content-Type: application/json
+```
+
+当前提供的工具包括 `list_documents`、`read_document`、`create_document`、`update_document`、`delete_document`、`search_documents` 和 `duplicate_document`。如果不配置 `MCP_API_KEY`，也可以使用登录接口返回的 JWT 访问 MCP，但 JWT 会按 `ACCESS_TOKEN_MINUTES` 过期。
 
 桌面端打开“设置 → 服务器连接”，填写服务地址、邮箱和密码后登录。登录后，打开文件夹、保存、重命名、复制和删除操作会直接作用于服务端数据；未登录时仍使用原来的本地文件模式。
 

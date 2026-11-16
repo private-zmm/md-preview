@@ -21,6 +21,8 @@ export const config = {
   embeddingApiKey: process.env.EMBEDDING_API_KEY || '',
   embeddingModel: process.env.EMBEDDING_MODEL || 'text-embedding-3-small',
   embeddingDimensions: Number(process.env.EMBEDDING_DIMENSIONS || 1536),
+  mcpApiKey: process.env.MCP_API_KEY || '',
+  mcpUserEmail: process.env.MCP_USER_EMAIL || process.env.ADMIN_EMAIL || 'admin@example.com',
   backupSchedule: process.env.BACKUP_SCHEDULE || '0 3 * * *',
   backupEnabled: process.env.BACKUP_ENABLED !== 'false',
   s3: {

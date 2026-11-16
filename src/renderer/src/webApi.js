@@ -259,8 +259,6 @@ function createWebApi() {
     onOpenFromSystem: () => () => {},
     onRequestClose: () => () => {},
     refreshMarkdownFolder: async () => ({ canceled: true }),
-    openRemoteMarkdownFile: async () => { throw new Error('浏览器版暂不支持 WebDAV') },
-    openRemoteMarkdownFolder: async () => { throw new Error('浏览器版暂不支持 WebDAV') },
     testSyncConnection: async () => { throw new Error('浏览器版暂不支持远程连接测试') }
   }
 }

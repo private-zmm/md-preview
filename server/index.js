@@ -14,11 +14,12 @@ import { ensureStorage, readDocument, writeDocument, deleteDocumentFile, saveAss
 import { generateDocumentEmbedding, queueDocumentEmbedding } from './embedding.js'
 import { createBackup, listBackups, restoreBackup, startBackupScheduler } from './backup.js'
 import { encryptJson } from './secure.js'
+import { handleMcpRequest, mcpAuthRequired } from './mcp.js'
 
-const app = Fastify({ logger: true, bodyLimit: 25 * 1024 * 1024 })
+const app = Fastify({ logger: true, bodyLimit: 100 * 1024 * 1024 })
 
 await app.register(cors, { origin: true, credentials: true })
-await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024, files: 1 } })
+await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024, files: 2000 } })
 
 app.get('/health', async () => ({ ok: true, service: 'mdpreview-server', time: new Date().toISOString() }))
 
@@ -74,6 +75,61 @@ app.post('/api/documents', { preHandler: authRequired }, async (request, reply) 
   )
   queueDocumentEmbedding(id)
   return reply.code(201).send({ id, title, version: 1, content, relativePath })
+})
+
+function normalizeImportedPath(value) {
+  const parts = String(value || '')
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter((part) => part && part !== '.' && part !== '..')
+  return parts.join('/')
+}
+
+app.post('/api/documents/import', { preHandler: authRequired }, async (request, reply) => {
+  const imported = []
+
+  for await (const part of request.parts()) {
+    if (part.type !== 'file') continue
+
+    const relativePath = normalizeImportedPath(part.filename)
+    if (!/\.(md|markdown|mdown|mkd)$/i.test(relativePath)) {
+      part.file.resume()
+      continue
+    }
+
+    const content = (await part.toBuffer()).toString('utf8')
+    const title = path.posix.basename(relativePath)
+    const existing = await query(
+      'SELECT * FROM documents WHERE user_id = $1 AND relative_path = $2',
+      [request.user.sub, relativePath]
+    )
+
+    if (existing.rows[0]) {
+      const document = existing.rows[0]
+      await writeDocument(request.user.sub, document.id, content)
+      const updated = await query(
+        `UPDATE documents SET title = $1, version = version + 1, updated_at = NOW()
+         WHERE id = $2 RETURNING id, title, relative_path, version, updated_at`,
+        [title, document.id]
+      )
+      queueDocumentEmbedding(document.id)
+      imported.push(updated.rows[0])
+      continue
+    }
+
+    const id = crypto.randomUUID()
+    const contentPath = await writeDocument(request.user.sub, id, content)
+    const created = await query(
+      `INSERT INTO documents (id, user_id, title, relative_path, content_path)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, title, relative_path, version, updated_at`,
+      [id, request.user.sub, title, relativePath, contentPath]
+    )
+    queueDocumentEmbedding(id)
+    imported.push(created.rows[0])
+  }
+
+  return reply.code(201).send({ imported, count: imported.length })
 })
 
 app.get('/api/documents/:id', { preHandler: authRequired }, async (request, reply) => {
@@ -210,6 +266,9 @@ app.delete('/api/mcp/servers/:id', { preHandler: authRequired }, async (request,
 app.get('/api/backups', { preHandler: adminRequired }, async () => ({ backups: await listBackups() }))
 app.post('/api/backups/create', { preHandler: adminRequired }, async () => ({ backup: await createBackup() }))
 app.post('/api/backups/:id/restore', { preHandler: adminRequired }, async (request) => ({ result: await restoreBackup(request.params.id) }))
+
+app.post('/mcp', { preHandler: mcpAuthRequired }, handleMcpRequest)
+app.post('/api/mcp', { preHandler: mcpAuthRequired }, handleMcpRequest)
 
 const webRoot = path.resolve(process.cwd(), 'dist-web')
 if (fsSync.existsSync(webRoot)) {

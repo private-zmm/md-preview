@@ -20,7 +20,7 @@ const emit = defineEmits([
   'create',
   'open',
   'open-folder',
-  'open-remote-folder',
+  'upload-folder',
   'save',
   'save-as',
   'export',
@@ -71,7 +71,7 @@ onUnmounted(() => {
         @create="emit('create')"
         @open="emit('open')"
         @open-folder="emit('open-folder')"
-        @open-remote-folder="emit('open-remote-folder')"
+        @upload-folder="emit('upload-folder')"
         @save="emit('save')"
         @save-as="emit('save-as')"
         @export="emit('export', $event)"

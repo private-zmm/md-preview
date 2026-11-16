@@ -26,14 +26,6 @@ const defaultS3Settings = {
   forcePathStyle: false
 }
 
-const defaultWebDavSettings = {
-  url: '',
-  publicBaseUrl: '',
-  username: '',
-  password: '',
-  remotePath: '/MdPreview'
-}
-
 const defaultServerSettings = {
   serverUrl: 'http://localhost:8787',
   email: '',
@@ -45,10 +37,6 @@ const defaultSettings = {
     imageProvider: 'local',
     imageSavePath: 'images',
     s3: { ...defaultS3Settings }
-  },
-  remote: {
-    webdav: { ...defaultWebDavSettings },
-    webdavImagePath: 'images'
   },
   server: { ...defaultServerSettings }
 }
@@ -122,19 +110,11 @@ function normalizeS3Settings(settings = {}) {
   }
 }
 
-function normalizeWebDavSettings(settings = {}) {
-  return {
-    ...defaultWebDavSettings,
-    ...settings
-  }
-}
-
 function normalizeSettings(settings = {}) {
-  const hasCurrentShape = settings.image || settings.remote?.webdavImagePath
+  const hasCurrentShape = settings.image || settings.server
   const hasPreviousShape = settings.local || settings.remote
   const legacyImagePath = settings.imageSavePath || defaultSettings.image.imageSavePath
   const legacyS3 = normalizeS3Settings(settings.s3 || {})
-  const legacyWebDav = normalizeWebDavSettings(settings.webdav || {})
 
   if (!hasCurrentShape && !hasPreviousShape) {
     return {
@@ -146,32 +126,16 @@ function normalizeSettings(settings = {}) {
           imagePath: legacyImagePath
         }
       },
-      remote: {
-        webdav: legacyWebDav,
-        webdavImagePath: legacyImagePath
-      },
       server: { ...defaultServerSettings }
     }
   }
 
   const previousLocal = settings.local || {}
-  const previousRemote = settings.remote || {}
-
   return {
     image: {
       ...defaultSettings.image,
       ...(settings.image || previousLocal),
       s3: normalizeS3Settings(settings.image?.s3 || previousLocal.s3 || {})
-    },
-    remote: {
-      ...defaultSettings.remote,
-      ...previousRemote,
-      webdav: normalizeWebDavSettings(previousRemote.webdav || {}),
-      webdavImagePath:
-        previousRemote.webdavImagePath ||
-        previousLocal.imageSavePath ||
-        settings.imageSavePath ||
-        defaultSettings.remote.webdavImagePath
     },
     server: {
       ...defaultServerSettings,
@@ -233,15 +197,6 @@ function saveImageSettings(settings) {
   showNotification('图像设置已保存', 'success')
 }
 
-function saveRemoteSettings(settings) {
-  persistSettings({
-    ...appSettings.value,
-    remote: settings
-  })
-  setStatus('远程设置已保存')
-  showNotification('远程设置已保存', 'success')
-}
-
 function createS3SyncSettings(s3) {
   return {
     syncProvider: 's3',
@@ -249,30 +204,7 @@ function createS3SyncSettings(s3) {
   }
 }
 
-function createWebDavSyncSettings(webdav) {
-  return {
-    syncProvider: 'webdav',
-    webdav: normalizeWebDavSettings(webdav)
-  }
-}
-
-function getRemoteSyncSettings() {
-  return createWebDavSyncSettings(appSettings.value.remote.webdav)
-}
-
 const activeImageConfig = computed(() => {
-  const isRemoteDocument =
-    state.filePath?.startsWith('webdav://') || folderPath.value?.startsWith('webdav://')
-
-  if (isRemoteDocument) {
-    const remote = appSettings.value.remote
-
-    return {
-      imageSavePath: remote.webdavImagePath || 'images',
-      syncSettings: createWebDavSyncSettings(remote.webdav)
-    }
-  }
-
   const image = appSettings.value.image
 
   if (image.imageProvider === 's3') {
@@ -483,9 +415,7 @@ async function openFile(filePath) {
   if (!(await maybeContinueWithUnsavedChanges())) return
 
   try {
-    const result = filePath?.startsWith('webdav://')
-      ? await api.openRemoteMarkdownFile(filePath, toSerializable(getRemoteSyncSettings()))
-      : await api.openMarkdownFile(filePath)
+    const result = await api.openMarkdownFile(filePath)
     if (result?.canceled) return
 
     loadDocument(result)
@@ -540,11 +470,6 @@ function isSameOrChildPath(parentPath, childPath) {
 function getFolderActionDir(file) {
   if (!file?.filePath) return folderPath.value
   if (file.type === 'directory') return file.filePath
-  if (file.filePath.startsWith('webdav://')) {
-    const index = file.filePath.lastIndexOf('/')
-    return index > 'webdav://'.length - 1 ? file.filePath.slice(0, index) : folderPath.value
-  }
-
   return file.filePath.split(/[\\/]/).slice(0, -1).join('\\') || folderPath.value
 }
 
@@ -581,9 +506,7 @@ function applyFolderResult(folder) {
 
 async function refreshFolder() {
   if (!folderPath.value || typeof api.refreshMarkdownFolder !== 'function') return
-  const result = folderPath.value.startsWith('webdav://')
-    ? await api.refreshRemoteMarkdownFolder(toSerializable(getRemoteSyncSettings()), folderPath.value)
-    : await api.refreshMarkdownFolder(folderPath.value)
+  const result = await api.refreshMarkdownFolder(folderPath.value)
   if (!result?.canceled) applyFolderResult(result)
 }
 
@@ -591,21 +514,11 @@ async function handleFolderAction({ action, file }) {
   if (!folderPath.value) return
 
   try {
-    const isRemoteFolder = folderPath.value.startsWith('webdav://')
-    const remoteSettings = toSerializable(getRemoteSyncSettings())
-
     if (action === 'new-file') {
       const fileName = await requestInputName('新建 Markdown 文件', 'Untitled.md')
       if (!fileName) return
 
-      const result = isRemoteFolder
-        ? await api.createRemoteMarkdownFileInFolder({
-            settings: remoteSettings,
-            folderPath: folderPath.value,
-            targetDirPath: getFolderActionDir(file),
-            fileName
-          })
-        : await api.createMarkdownFileInFolder({
+      const result = await api.createMarkdownFileInFolder({
             folderPath: folderPath.value,
             targetDirPath: getFolderActionDir(file),
             fileName
@@ -619,14 +532,7 @@ async function handleFolderAction({ action, file }) {
       const newFolderName = await requestInputName('新建文件夹', 'New Folder')
       if (!newFolderName) return
 
-      const result = isRemoteFolder
-        ? await api.createRemoteFolderInFolder({
-            settings: remoteSettings,
-            folderPath: folderPath.value,
-            targetDirPath: getFolderActionDir(file),
-            folderName: newFolderName
-          })
-        : await api.createFolderInFolder({
+      const result = await api.createFolderInFolder({
             folderPath: folderPath.value,
             targetDirPath: getFolderActionDir(file),
             folderName: newFolderName
@@ -642,14 +548,7 @@ async function handleFolderAction({ action, file }) {
       const nextName = await requestInputName('重命名', file.fileName)
       if (!nextName || nextName === file.fileName) return
 
-      const result = isRemoteFolder
-        ? await api.renameRemoteFolderItem({
-            settings: remoteSettings,
-            folderPath: folderPath.value,
-            itemPath: file.filePath,
-            newName: nextName
-          })
-        : await api.renameFolderItem({
+      const result = await api.renameFolderItem({
             folderPath: folderPath.value,
             itemPath: file.filePath,
             newName: nextName
@@ -670,13 +569,7 @@ async function handleFolderAction({ action, file }) {
     }
 
     if (action === 'duplicate') {
-      const result = isRemoteFolder
-        ? await api.duplicateRemoteFolderFile({
-            settings: remoteSettings,
-            folderPath: folderPath.value,
-            filePath: file.filePath
-          })
-        : await api.duplicateFolderFile({
+      const result = await api.duplicateFolderFile({
             folderPath: folderPath.value,
             filePath: file.filePath
           })
@@ -688,13 +581,7 @@ async function handleFolderAction({ action, file }) {
     if (action === 'delete') {
       if (!window.confirm(`确定删除 ${file.fileName}？`)) return
 
-      const result = isRemoteFolder
-        ? await api.deleteRemoteFolderItem({
-            settings: remoteSettings,
-            folderPath: folderPath.value,
-            itemPath: file.filePath
-          })
-        : await api.deleteFolderItem({
+      const result = await api.deleteFolderItem({
             folderPath: folderPath.value,
             itemPath: file.filePath
           })
@@ -711,8 +598,7 @@ async function handleFolderAction({ action, file }) {
     }
 
     if (action === 'show-location') {
-      if (isRemoteFolder) await api.showRemoteFolderItem(remoteSettings, file.filePath)
-      else await api.showFolderItem(file.filePath)
+      await api.showFolderItem(file.filePath)
     }
   } catch (error) {
     setStatus(`文件操作失败：${error.message}`)
@@ -745,25 +631,36 @@ async function openFolder() {
   }
 }
 
-async function openRemoteFolder() {
-  if (!(await maybeContinueWithUnsavedChanges())) return
+function chooseFolderFiles() {
+  return new Promise((resolve) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.multiple = true
+    input.webkitdirectory = true
+    input.onchange = () => resolve([...input.files])
+    input.click()
+  })
+}
+
+async function uploadFolder() {
+  if (!api.isServerMode?.()) {
+    setStatus('请先在设置中连接服务器')
+    showNotification('请先连接服务器，再上传文件夹', 'error')
+    return
+  }
+
+  const files = await chooseFolderFiles()
+  if (files.length === 0) return
 
   try {
-    if (typeof api.openRemoteMarkdownFolder !== 'function') {
-      setStatus('打开远程文件夹功能需要重启应用后生效')
-      return
-    }
-
-    const result = await api.openRemoteMarkdownFolder(toSerializable(getRemoteSyncSettings()))
-    if (result?.canceled) return
-
-    folderName.value = result.folderName
-    folderPath.value = result.folderPath
-    folderFiles.value = result.files || []
-    setStatus(`已打开远程文件夹 ${result.folderName}，找到 ${countMarkdownFiles(folderFiles.value)} 个 Markdown 文件`)
+    const result = await api.importMarkdownFolder(files)
+    const folder = await api.openServerMarkdownFolder()
+    applyFolderResult(folder)
+    setStatus(`已上传 ${result.count} 篇 Markdown 文档`)
+    showNotification(`已上传 ${result.count} 篇 Markdown 文档`, 'success')
   } catch (error) {
-    setStatus(`打开远程文件夹失败：${error.message}`)
-    showNotification(`打开远程文件夹失败：${error.message}`, 'error')
+    setStatus(`上传文件夹失败：${error.message}`)
+    showNotification(`上传文件夹失败：${error.message}`, 'error')
   }
 }
 
@@ -771,13 +668,7 @@ async function saveFile() {
   try {
     const contentToSave = editorPaneRef.value?.getValue?.() ?? state.content
     state.content = contentToSave
-    const result = state.filePath?.startsWith('webdav://')
-      ? await api.saveRemoteMarkdownFile(
-          toSerializable(getRemoteSyncSettings()),
-          state.filePath,
-          contentToSave
-        )
-      : await api.saveMarkdownFile(state.filePath, contentToSave, folderPath.value || null)
+    const result = await api.saveMarkdownFile(state.filePath, contentToSave, folderPath.value || null)
     if (result?.canceled) return false
 
     markSaved(result, contentToSave)
@@ -890,7 +781,7 @@ watch(isDirty, (dirty) => api?.setDocumentEdited(dirty), { immediate: true })
       @create="createFile"
       @open="openFile"
       @open-folder="openFolder"
-      @open-remote-folder="openRemoteFolder"
+      @upload-folder="uploadFolder"
       @save="saveFile"
       @save-as="saveFileAs"
       @export="exportDocument"
@@ -907,7 +798,6 @@ watch(isDirty, (dirty) => api?.setDocumentEdited(dirty), { immediate: true })
       @status="handleSettingsStatus"
       @save="saveSettings"
       @save-image="saveImageSettings"
-      @save-remote="saveRemoteSettings"
       @save-server="saveServerSettings"
     />
 

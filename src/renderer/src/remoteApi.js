@@ -234,6 +234,17 @@ export function createRemoteApi(localApi) {
     }
   }
 
+  async function importMarkdownFolder(files) {
+    const form = new FormData()
+    for (const file of files || []) {
+      if (/\.(md|markdown|mdown|mkd)$/i.test(file.name || '')) {
+        form.append('files', file, file.webkitRelativePath || file.name)
+      }
+    }
+    const response = await request('/api/documents/import', { method: 'POST', body: form })
+    return response.json()
+  }
+
   async function resolveServerAssetUrl(markdownFilePath, source) {
     if (!source || /^(?:[a-z]+:|\/\/)/i.test(source)) return source
     if (!isServerMode()) return source
@@ -281,6 +292,7 @@ export function createRemoteApi(localApi) {
         ? saveServerImageFile(options)
         : localApi.saveImageFile(options)
     },
+    importMarkdownFolder,
     async resolveAssetUrl(markdownFilePath, source, syncSettings) {
       return String(markdownFilePath || '').startsWith('server://')
         ? resolveServerAssetUrl(markdownFilePath, source)

@@ -8,11 +8,10 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['close', 'status', 'save-image', 'save-remote', 'save-server'])
+const emit = defineEmits(['close', 'status', 'save-image', 'save-server'])
 const activeTab = ref('image')
 const tabs = [
   { key: 'image', label: '图像设置' },
-  { key: 'remote', label: '远程设置' },
   { key: 'server', label: '服务器连接' }
 ]
 
@@ -33,11 +32,6 @@ watch(
 function saveCurrentSettings() {
   if (activeTab.value === 'image') {
     emit('save-image', cloneSettings(localSettings.value.image))
-    return
-  }
-
-  if (activeTab.value === 'remote') {
-    emit('save-remote', cloneSettings(localSettings.value.remote))
     return
   }
 
@@ -83,15 +77,6 @@ function testImageS3() {
   )
 }
 
-function testRemoteWebDav() {
-  testConnection(
-    'webdav',
-    {
-      webdav: localSettings.value.remote.webdav
-    },
-    'WebDAV 连接成功'
-  )
-}
 </script>
 
 <template>
@@ -99,7 +84,7 @@ function testRemoteWebDav() {
     <header class="settings-page-header">
       <div>
         <h1 id="settingsTitle">设置</h1>
-        <p>配置图片保存位置和远程 WebDAV 文件夹。</p>
+        <p>配置图片保存位置和服务器连接。</p>
       </div>
       <button class="settings-secondary" type="button" @click="emit('close')">返回</button>
     </header>
@@ -209,65 +194,6 @@ function testRemoteWebDav() {
           </div>
         </section>
 
-        <section v-else-if="activeTab === 'remote'" class="settings-section">
-          <h2>远程设置</h2>
-
-          <div class="settings-row">
-            <div>
-              <h3>WebDAV 连接</h3>
-              <p>文件菜单里的“打开远程文件夹”会使用此连接。</p>
-            </div>
-            <button class="settings-secondary" type="button" @click="testRemoteWebDav">测试 WebDAV</button>
-          </div>
-
-          <div class="settings-form-grid">
-            <label class="settings-field">
-              <span>服务器地址</span>
-              <input
-                v-model.trim="localSettings.remote.webdav.url"
-                class="settings-input"
-                type="url"
-                placeholder="https://example.com/dav"
-              />
-            </label>
-            <label class="settings-field">
-              <span>图片公开访问地址</span>
-              <input
-                v-model.trim="localSettings.remote.webdav.publicBaseUrl"
-                class="settings-input"
-                type="url"
-                placeholder="https://cdn.example.com/dav"
-              />
-            </label>
-            <label class="settings-field">
-              <span>用户名</span>
-              <input v-model.trim="localSettings.remote.webdav.username" class="settings-input" type="text" />
-            </label>
-            <label class="settings-field">
-              <span>密码 / Token</span>
-              <input v-model="localSettings.remote.webdav.password" class="settings-input" type="password" />
-            </label>
-            <label class="settings-field">
-              <span>默认远程文件夹</span>
-              <input
-                v-model.trim="localSettings.remote.webdav.remotePath"
-                class="settings-input"
-                type="text"
-                placeholder="/MdPreview"
-              />
-            </label>
-            <label class="settings-field">
-              <span>远程图片目录</span>
-              <input
-                v-model.trim="localSettings.remote.webdavImagePath"
-                class="settings-input"
-                type="text"
-                placeholder="images"
-              />
-            </label>
-          </div>
-        </section>
-
         <section v-else class="settings-section">
           <h2>服务器连接</h2>
 
@@ -313,7 +239,7 @@ function testRemoteWebDav() {
     <footer class="settings-page-footer">
       <button class="dialog-button" type="button" @click="emit('close')">返回</button>
       <button class="dialog-button primary settings-save-button" type="button" @click="saveCurrentSettings">
-      {{ activeTab === 'image' ? '保存图像设置' : activeTab === 'remote' ? '保存远程设置' : '保存服务器设置' }}
+      {{ activeTab === 'image' ? '保存图像设置' : '保存服务器设置' }}
       </button>
     </footer>
   </section>

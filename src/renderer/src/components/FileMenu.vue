@@ -12,7 +12,7 @@ const emit = defineEmits([
   'create',
   'open',
   'open-folder',
-  'open-remote-folder',
+  'upload-folder',
   'save',
   'save-as',
   'export',
@@ -24,7 +24,7 @@ const menuGroups = [
     { label: '新建', shortcut: 'Ctrl+N', event: 'create' },
     { label: '打开...', shortcut: 'Ctrl+O', event: 'open' },
     { label: '打开文件夹...', shortcut: 'Ctrl+Shift+O', event: 'open-folder' },
-    { label: '打开远程文件夹...', event: 'open-remote-folder' }
+    { label: '上传文件夹到服务器...', event: 'upload-folder' }
   ],
   [
     { label: '保存', shortcut: 'Ctrl+S', event: 'save' },

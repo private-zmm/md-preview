@@ -60,8 +60,7 @@ function normalizePathPart(part) {
 
 function joinPath(basePath, name) {
   if (!basePath) return name
-  const separator = basePath.startsWith('webdav://') ? '/' : '\\'
-  return `${basePath.replace(/[\\/]$/, '')}${separator}${name}`
+  return `${basePath.replace(/[\\/]$/, '')}\\${name}`
 }
 
 function createDirNode(name, path, level, parentPath = '') {
