@@ -183,6 +183,20 @@ app.post('/api/documents/:id/duplicate', { preHandler: authRequired }, async (re
   return reply.code(201).send({ id, title, version: 1, relativePath: '' })
 })
 
+app.delete('/api/documents/folder', { preHandler: authRequired }, async (request, reply) => {
+  const relativePath = normalizeImportedPath(request.body?.relativePath || '')
+  if (!relativePath) return reply.code(400).send({ error: '文件夹路径不能为空' })
+
+  const result = await query(
+    `DELETE FROM documents
+     WHERE user_id = $1 AND (relative_path = $2 OR relative_path LIKE $3)
+     RETURNING content_path`,
+    [request.user.sub, relativePath, `${relativePath}/%`]
+  )
+  await Promise.all(result.rows.map((document) => deleteDocumentFile(document.content_path)))
+  return { ok: true, count: result.rowCount }
+})
+
 app.delete('/api/documents/:id', { preHandler: authRequired }, async (request, reply) => {
   const result = await query('SELECT content_path FROM documents WHERE id = $1 AND user_id = $2', [request.params.id, request.user.sub])
   if (!result.rows[0]) return reply.code(404).send({ error: '文档不存在' })

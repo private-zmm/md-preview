@@ -449,6 +449,31 @@ function getValue() {
   return editor?.getValue() ?? model.value
 }
 
+function closestCodeBlock(node) {
+  if (!node) return null
+  const element = node.nodeType === 1 ? node : node.parentElement
+  return element?.closest?.('.vditor-wysiwyg__block[data-type="code-block"]') || null
+}
+
+function selectedCodeBlock() {
+  return closestCodeBlock(window.getSelection()?.anchorNode)
+}
+
+function setActiveCodeBlock(block) {
+  rootRef.value?.querySelectorAll('.vditor-wysiwyg__block[data-type="code-block"]').forEach((item) => {
+    item.classList.toggle('md-preview-code-editing', item === block)
+  })
+}
+
+function syncActiveCodeBlock(event) {
+  const targetBlock = closestCodeBlock(event?.target)
+  window.setTimeout(() => setActiveCodeBlock(targetBlock || selectedCodeBlock()), 0)
+}
+
+function clearActiveCodeBlock(event) {
+  if (!rootRef.value?.contains(event.target)) setActiveCodeBlock(null)
+}
+
 onMounted(() => {
   editor = new Vditor(rootRef.value, {
     value: model.value,
@@ -496,7 +521,11 @@ onMounted(() => {
       setEditorValue(model.value, true)
       rootRef.value?.addEventListener('paste', handlePaste, true)
       rootRef.value?.addEventListener('contextmenu', openTableMenu, true)
+      rootRef.value?.addEventListener('click', syncActiveCodeBlock, true)
+      rootRef.value?.addEventListener('keyup', syncActiveCodeBlock, true)
+      rootRef.value?.addEventListener('input', syncActiveCodeBlock, true)
       window.addEventListener('pointerdown', closeTableMenu)
+      window.addEventListener('pointerdown', clearActiveCodeBlock, true)
       window.addEventListener('keydown', handleTableMenuKeydown)
       scheduleResolvePreviewImages()
     }
@@ -506,7 +535,11 @@ onMounted(() => {
 onBeforeUnmount(() => {
   rootRef.value?.removeEventListener('paste', handlePaste, true)
   rootRef.value?.removeEventListener('contextmenu', openTableMenu, true)
+  rootRef.value?.removeEventListener('click', syncActiveCodeBlock, true)
+  rootRef.value?.removeEventListener('keyup', syncActiveCodeBlock, true)
+  rootRef.value?.removeEventListener('input', syncActiveCodeBlock, true)
   window.removeEventListener('pointerdown', closeTableMenu)
+  window.removeEventListener('pointerdown', clearActiveCodeBlock, true)
   window.removeEventListener('keydown', handleTableMenuKeydown)
   editor?.destroy()
   editor = null

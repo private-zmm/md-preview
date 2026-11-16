@@ -116,6 +116,7 @@ GET  /api/documents
 POST /api/documents
 POST /api/documents/import
 PUT  /api/documents/:id
+DELETE /api/documents/folder
 POST /api/documents/:id/assets
 GET  /api/search
 GET  /api/backups

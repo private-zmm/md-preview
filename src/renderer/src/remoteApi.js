@@ -215,7 +215,19 @@ export function createRemoteApi(localApi) {
 
   async function deleteServerFolderItem(options) {
     const documentId = documentIdFromPath(options.itemPath)
-    await request(`/api/documents/${documentId}`, { method: 'DELETE' })
+    if (documentId) {
+      await request(`/api/documents/${documentId}`, { method: 'DELETE' })
+    } else {
+      const relativePath = String(options.itemPath || '')
+        .replace(/^server:\/\/workspace[\\/]?/, '')
+        .replace(/\\/g, '/')
+        .replace(/^\/+|\/+$/g, '')
+      if (!relativePath) throw new Error('无法识别服务器文件夹路径')
+      await request('/api/documents/folder', {
+        method: 'DELETE',
+        body: JSON.stringify({ relativePath })
+      })
+    }
     return { deletedPath: options.itemPath, folder: await openServerMarkdownFolder() }
   }
 

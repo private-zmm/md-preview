@@ -865,7 +865,15 @@ button {
   background: transparent !important;
 }
 
-.vditor-editor .vditor-wysiwyg__block:focus-within > .vditor-wysiwyg__preview {
+.vditor-editor .vditor-wysiwyg__block[data-type="code-block"] > pre:first-child {
+  display: none !important;
+}
+
+.vditor-editor .vditor-wysiwyg__block[data-type="code-block"].md-preview-code-editing > pre:first-child {
+  display: block !important;
+}
+
+.vditor-editor .vditor-wysiwyg__block[data-type="code-block"].md-preview-code-editing > .vditor-wysiwyg__preview {
   display: none !important;
 }
 
