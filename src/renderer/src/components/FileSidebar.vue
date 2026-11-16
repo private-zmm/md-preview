@@ -28,14 +28,17 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['create-file', 'open-file', 'folder-action', 'select-outline'])
+const emit = defineEmits(['create-file', 'open-file', 'folder-action', 'select-outline', 'resize-start'])
 const activeTab = ref(props.showFiles ? 'files' : 'outline')
 const expandedDirs = ref(new Set())
+const rootExpanded = ref(true)
+const searchQuery = ref('')
 const sidebarLabel = computed(() => (props.showFiles ? 'Markdown 文件夹' : 'Markdown 大纲'))
 const footerName = computed(() => props.folderName || '当前文件')
 const markdownFileCount = computed(() => props.files.filter((file) => file.type !== 'directory').length)
 const fileTree = computed(() => buildFileTree(props.files))
-const visibleFileNodes = computed(() => flattenVisibleNodes(fileTree.value))
+const displayFileTree = computed(() => filterFileTree(fileTree.value, searchQuery.value))
+const visibleFileNodes = computed(() => (rootExpanded.value ? flattenVisibleNodes(displayFileTree.value) : []))
 const contextMenu = ref({
   visible: false,
   x: 0,
@@ -117,6 +120,24 @@ function buildFileTree(files) {
   return normalizeNode(root)
 }
 
+function filterFileTree(nodes, query) {
+  const normalizedQuery = String(query || '').trim().toLocaleLowerCase()
+  if (!normalizedQuery) return nodes
+
+  return nodes.reduce((matches, node) => {
+    if (node.type === 'directory') {
+      const children = filterFileTree(node.children, normalizedQuery)
+      if (children.length > 0) matches.push({ ...node, children })
+      return matches
+    }
+
+    const file = node.file
+    const searchable = `${file.fileName || ''} ${file.relativePath || ''}`.toLocaleLowerCase()
+    if (searchable.includes(normalizedQuery)) matches.push(node)
+    return matches
+  }, [])
+}
+
 function flattenVisibleNodes(nodes) {
   const visibleNodes = []
 
@@ -156,7 +177,7 @@ function toggleDir(node) {
   const nextExpandedDirs = new Set(expandedDirs.value)
   const isExpanded = nextExpandedDirs.has(node.path)
 
-  for (const path of collectDirectoryPaths(fileTree.value, (item) => item.parentPath === node.parentPath || item.path.startsWith(`${node.path}\\`) || item.path.startsWith(`${node.path}/`))) {
+  for (const path of collectDirectoryPaths(displayFileTree.value, (item) => item.parentPath === node.parentPath || item.path.startsWith(`${node.path}\\`) || item.path.startsWith(`${node.path}/`))) {
     nextExpandedDirs.delete(path)
   }
 
@@ -173,16 +194,24 @@ watch(
 )
 
 watch(
-  fileTree,
+  displayFileTree,
   (nodes) => {
     const existingPaths = new Set(collectDirectoryPaths(nodes))
     const nextExpandedDirs = new Set([...expandedDirs.value].filter((path) => existingPaths.has(path)))
-    if (nextExpandedDirs.size === 0) {
+    if (searchQuery.value.trim() || nextExpandedDirs.size === 0) {
       existingPaths.forEach((path) => nextExpandedDirs.add(path))
     }
     expandedDirs.value = nextExpandedDirs
   },
   { immediate: true }
+)
+
+watch(
+  () => props.folderPath,
+  () => {
+    rootExpanded.value = true
+    searchQuery.value = ''
+  }
 )
 
 function closeContextMenu() {
@@ -222,6 +251,12 @@ function handleKeydown(event) {
   if (event.key === 'Escape') closeContextMenu()
 }
 
+function startResize(event) {
+  if (event.button !== 0) return
+  event.preventDefault()
+  emit('resize-start', event)
+}
+
 onMounted(() => {
   window.addEventListener('pointerdown', closeContextMenu)
   window.addEventListener('keydown', handleKeydown)
@@ -236,27 +271,49 @@ onUnmounted(() => {
 <template>
   <aside class="file-sidebar" :class="{ 'outline-only': !showFiles }" :aria-label="sidebarLabel">
     <header class="file-sidebar-header">
-      <button
-        v-if="showFiles"
-        class="file-sidebar-tab"
-        :class="{ active: activeTab === 'files' }"
-        type="button"
-        @click="activeTab = 'files'"
-      >
-        文件
-      </button>
-      <button
-        class="file-sidebar-tab"
-        :class="{ active: activeTab === 'outline' }"
-        type="button"
-        @click="activeTab = 'outline'"
-      >
-        大纲
-      </button>
+      <label v-if="showFiles" class="file-sidebar-search">
+        <svg class="file-sidebar-search-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="10.8" cy="10.8" r="6.8"></circle>
+          <path d="m16 16 5 5"></path>
+        </svg>
+        <input v-model="searchQuery" type="search" placeholder="搜索笔记、记事和画布..." aria-label="搜索文件" />
+        <button v-if="searchQuery" class="file-sidebar-search-clear" type="button" aria-label="清除搜索" @click="searchQuery = ''">×</button>
+      </label>
+
+      <div class="file-sidebar-tabs">
+        <button
+          v-if="showFiles"
+          class="file-sidebar-tab"
+          :class="{ active: activeTab === 'files' }"
+          type="button"
+          @click="activeTab = 'files'"
+        >
+          文件
+        </button>
+        <button
+          class="file-sidebar-tab"
+          :class="{ active: activeTab === 'outline' }"
+          type="button"
+          @click="activeTab = 'outline'"
+        >
+          大纲
+        </button>
+      </div>
     </header>
 
     <div v-if="activeTab === 'files'" class="file-sidebar-list" @contextmenu="openContextMenu($event)">
-      <div v-if="visibleFileNodes.length === 0" class="empty-folder">没有 Markdown 文件</div>
+      <button v-if="folderName" class="folder-root" type="button" :title="folderPath || folderName" @click="rootExpanded = !rootExpanded">
+        <svg class="tree-chevron" :class="{ expanded: rootExpanded }" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="m4 6 4 4 4-4"></path>
+        </svg>
+        <svg class="folder-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3.5 6.5h6l2 2h9v9.8a2.2 2.2 0 0 1-2.2 2.2H5.7a2.2 2.2 0 0 1-2.2-2.2z"></path>
+          <path d="M3.5 8.5h17"></path>
+        </svg>
+        <span class="folder-directory-name">{{ folderName }}</span>
+      </button>
+
+      <div v-if="rootExpanded && visibleFileNodes.length === 0" class="empty-folder">{{ searchQuery ? '没有匹配的文件' : '没有 Markdown 文件' }}</div>
 
       <template v-else>
         <template v-for="node in visibleFileNodes" :key="node.type === 'directory' ? node.path : node.file.filePath">
@@ -269,7 +326,13 @@ onUnmounted(() => {
             @click="toggleDir(node)"
             @contextmenu.stop="openContextMenu($event, { type: 'directory', filePath: node.path, fileName: node.name })"
           >
-            <span class="folder-directory-caret">{{ isDirExpanded(node.path) ? '▾' : '▸' }}</span>
+            <svg class="tree-chevron" :class="{ expanded: isDirExpanded(node.path) }" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="m4 6 4 4 4-4"></path>
+            </svg>
+            <svg class="folder-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3.5 6.5h6l2 2h9v9.8a2.2 2.2 0 0 1-2.2 2.2H5.7a2.2 2.2 0 0 1-2.2-2.2z"></path>
+              <path d="M3.5 8.5h17"></path>
+            </svg>
             <span class="folder-directory-name">{{ node.name }}</span>
           </button>
 
@@ -284,6 +347,10 @@ onUnmounted(() => {
             @contextmenu.stop="openContextMenu($event, node.file)"
           >
             <span class="folder-file-content">
+              <svg class="file-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6.5 3.5h7l4 4v13h-11z"></path>
+                <path d="M13.5 3.5v4h4M9 12h6M9 16h6"></path>
+              </svg>
               <span class="folder-file-title">
                 <span class="folder-file-base">{{ node.file.baseName || node.file.fileName }}</span>
                 <span class="folder-file-ext">{{ node.file.extension || '' }}</span>
@@ -341,5 +408,7 @@ onUnmounted(() => {
       <span class="folder-footer-name">{{ footerName }}</span>
       <span class="folder-count">{{ markdownFileCount }}</span>
     </footer>
+
+    <div class="file-sidebar-resize-handle" role="separator" aria-orientation="vertical" aria-label="调整侧栏宽度" @pointerdown="startResize"></div>
   </aside>
 </template>

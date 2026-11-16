@@ -52,6 +52,8 @@ const notification = ref(null)
 const editorSessionKey = ref(0)
 const editorPaneRef = ref(null)
 const inputDialogInputRef = ref(null)
+const sidebarWidth = ref(loadSidebarWidth())
+const sidebarResizing = ref(false)
 const inputDialog = ref({
   title: '',
   value: ''
@@ -64,6 +66,7 @@ const { html, render } = useMarkdownRenderer(api)
 
 const hasSidebar = computed(() => Boolean(folderName.value || currentOutline.value.length > 0))
 const workspaceClass = computed(() => `workspace ${hasSidebar.value ? 'has-sidebar' : ''}`)
+const workspaceStyle = computed(() => ({ '--sidebar-width': `${sidebarWidth.value}px` }))
 const assetBasePath = computed(() => state.filePath || folderPath.value || null)
 const currentOutline = computed(() => {
   let headingIndex = 0
@@ -92,6 +95,38 @@ let removeCloseListener = null
 let unsavedDialogResolver = null
 let inputDialogResolver = null
 let notificationTimer = null
+let stopSidebarResize = null
+
+function loadSidebarWidth() {
+  const saved = Number.parseInt(localStorage.getItem('mdpreview-sidebar-width') || '', 10)
+  return Number.isFinite(saved) ? Math.min(520, Math.max(220, saved)) : 276
+}
+
+function startSidebarResize(event) {
+  stopSidebarResize?.()
+  sidebarResizing.value = true
+  const startX = event.clientX
+  const startWidth = sidebarWidth.value
+
+  const handleMove = (moveEvent) => {
+    const maxWidth = Math.max(320, Math.min(520, window.innerWidth - 360))
+    sidebarWidth.value = Math.min(maxWidth, Math.max(220, startWidth + moveEvent.clientX - startX))
+  }
+
+  const stop = () => {
+    window.removeEventListener('pointermove', handleMove)
+    window.removeEventListener('pointerup', stop)
+    window.removeEventListener('pointercancel', stop)
+    sidebarResizing.value = false
+    localStorage.setItem('mdpreview-sidebar-width', String(sidebarWidth.value))
+    stopSidebarResize = null
+  }
+
+  stopSidebarResize = stop
+  window.addEventListener('pointermove', handleMove)
+  window.addEventListener('pointerup', stop)
+  window.addEventListener('pointercancel', stop)
+}
 
 function loadSettings() {
   try {
@@ -757,6 +792,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  stopSidebarResize?.()
   removeOpenListener?.()
   removeCloseListener?.()
   window.clearTimeout(notificationTimer)
@@ -802,7 +838,7 @@ watch(isDirty, (dirty) => api?.setDocumentEdited(dirty), { immediate: true })
       @save-server="saveServerSettings"
     />
 
-    <section v-else :class="workspaceClass">
+    <section v-else :class="[workspaceClass, { 'sidebar-resizing': sidebarResizing }]" :style="workspaceStyle">
       <FileSidebar
         v-if="hasSidebar"
         :folder-name="folderName"
@@ -815,6 +851,7 @@ watch(isDirty, (dirty) => api?.setDocumentEdited(dirty), { immediate: true })
         @open-file="openFile"
         @folder-action="handleFolderAction"
         @select-outline="handleOutlineSelect"
+        @resize-start="startSidebarResize"
       />
       <VditorEditorPane
         ref="editorPaneRef"
