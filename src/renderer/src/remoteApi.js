@@ -22,6 +22,13 @@ function documentIdFromPath(filePath) {
   return match?.[1] || null
 }
 
+function serverRelativePathFromPath(itemPath) {
+  return String(itemPath || '')
+    .replace(/^server:\/\/workspace[\\/]?/, '')
+    .replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '')
+}
+
 export function createRemoteApi(localApi) {
   const usesSecureStorage = typeof localApi.loadServerSession === 'function'
   const state = { session: usesSecureStorage ? null : readSession(), ready: Promise.resolve() }
@@ -175,13 +182,16 @@ export function createRemoteApi(localApi) {
 
   async function createServerMarkdownFileInFolder(options) {
     const title = String(options.fileName || 'Untitled.md')
+    const fileName = /\.md$/i.test(title) ? title : `${title}.md`
+    const relativeDir = serverRelativePathFromPath(options.targetDirPath)
+    const relativePath = relativeDir ? `${relativeDir}/${fileName}` : fileName
     const response = await request('/api/documents', {
       method: 'POST',
-      body: JSON.stringify({ title: /\.md$/i.test(title) ? title : `${title}.md`, content: '' })
+      body: JSON.stringify({ title: fileName, content: '', relativePath })
     })
     const document = await response.json()
     return {
-      file: { type: 'file', filePath: serverPathForDocument(document.id), fileName: document.title, relativePath: document.title },
+      file: { type: 'file', filePath: serverPathForDocument(document.id), fileName: document.title, relativePath: document.relativePath },
       folder: await openServerMarkdownFolder()
     }
   }
@@ -218,10 +228,7 @@ export function createRemoteApi(localApi) {
     if (documentId) {
       await request(`/api/documents/${documentId}`, { method: 'DELETE' })
     } else {
-      const relativePath = String(options.itemPath || '')
-        .replace(/^server:\/\/workspace[\\/]?/, '')
-        .replace(/\\/g, '/')
-        .replace(/^\/+|\/+$/g, '')
+      const relativePath = serverRelativePathFromPath(options.itemPath)
       if (!relativePath) throw new Error('无法识别服务器文件夹路径')
       await request('/api/documents/folder', {
         method: 'DELETE',

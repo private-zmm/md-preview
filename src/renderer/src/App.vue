@@ -529,6 +529,13 @@ function isSameOrChildPath(parentPath, childPath) {
 
 function getFolderActionDir(file) {
   if (!file?.filePath) return folderPath.value
+  if (folderPath.value === 'server://workspace') {
+    const relativePath = file.type === 'directory'
+      ? String(file.filePath).replace(/^server:\/\/workspace[\\/]?/, '').replace(/\\/g, '/')
+      : String(file.relativePath || '').replace(/\\/g, '/')
+    const relativeDir = file.type === 'directory' ? relativePath : relativePath.split('/').slice(0, -1).join('/')
+    return relativeDir ? `server://workspace\\${relativeDir}` : folderPath.value
+  }
   if (file.type === 'directory') return file.filePath
   return file.filePath.split(/[\\/]/).slice(0, -1).join('\\') || folderPath.value
 }
