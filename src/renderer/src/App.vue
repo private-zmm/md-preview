@@ -435,10 +435,10 @@ async function saveServerSettings(settings) {
     email: settings.email || '',
     password: ''
   }
-  persistSettings({ ...appSettings.value, server: nextSettings })
 
   try {
     if (settings.disconnect) {
+      persistSettings({ ...appSettings.value, server: nextSettings })
       api.logout?.()
       setStatus('已断开服务器连接')
       showNotification('已断开服务器连接', 'success')
@@ -446,6 +446,7 @@ async function saveServerSettings(settings) {
     }
 
     await api.login(settings)
+    persistSettings({ ...appSettings.value, server: nextSettings })
     setStatus(`已连接 ${settings.serverUrl}`)
     showNotification('服务器连接成功', 'success')
   } catch (error) {
