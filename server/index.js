@@ -15,6 +15,7 @@ import { generateDocumentEmbedding, queueDocumentEmbedding } from './embedding.j
 import { createBackup, listBackups, restoreBackup, startBackupScheduler } from './backup.js'
 import { encryptJson } from './secure.js'
 import { handleMcpRequest, mcpAuthRequired } from './mcp.js'
+import { getServerSettings, loadServerSettings, saveServerSettings } from './settings.js'
 
 const app = Fastify({ logger: true, bodyLimit: 100 * 1024 * 1024 })
 
@@ -87,17 +88,27 @@ function normalizeImportedPath(value) {
 
 app.post('/api/documents/import', { preHandler: authRequired }, async (request, reply) => {
   const imported = []
+  let manifest = []
+  const files = []
 
   for await (const part of request.parts()) {
-    if (part.type !== 'file') continue
-
-    const relativePath = normalizeImportedPath(part.filename)
-    if (!/\.(md|markdown|mdown|mkd)$/i.test(relativePath)) {
-      part.file.resume()
+    if (part.type === 'field' && part.fieldname === 'manifest') {
+      try {
+        manifest = JSON.parse(String(part.value || ''))
+      } catch {
+        return reply.code(400).send({ error: '上传路径清单格式无效' })
+      }
       continue
     }
+    if (part.type !== 'file') continue
+    files.push({ filename: part.filename, content: await part.toBuffer() })
+  }
 
-    const content = (await part.toBuffer()).toString('utf8')
+  for (const [index, file] of files.entries()) {
+    const relativePath = normalizeImportedPath(manifest[index] || file.filename)
+    if (!/\.(md|markdown|mdown|mkd)$/i.test(relativePath)) continue
+
+    const content = file.content.toString('utf8')
     const title = path.posix.basename(relativePath)
     const existing = await query(
       'SELECT * FROM documents WHERE user_id = $1 AND relative_path = $2',
@@ -267,6 +278,13 @@ app.get('/api/backups', { preHandler: adminRequired }, async () => ({ backups: a
 app.post('/api/backups/create', { preHandler: adminRequired }, async () => ({ backup: await createBackup() }))
 app.post('/api/backups/:id/restore', { preHandler: adminRequired }, async (request) => ({ result: await restoreBackup(request.params.id) }))
 
+app.get('/api/admin/settings', { preHandler: adminRequired }, async () => getServerSettings())
+app.put('/api/admin/settings', { preHandler: adminRequired }, async (request) => {
+  const settings = await saveServerSettings(request.body || {})
+  startBackupScheduler()
+  return settings
+})
+
 app.post('/mcp', { preHandler: mcpAuthRequired }, handleMcpRequest)
 app.post('/api/mcp', { preHandler: mcpAuthRequired }, handleMcpRequest)
 
@@ -277,6 +295,7 @@ if (fsSync.existsSync(webRoot)) {
 }
 
 await migrate()
+await loadServerSettings()
 await ensureStorage()
 await ensureAdminUser()
 startBackupScheduler()

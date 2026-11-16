@@ -865,6 +865,10 @@ button {
   background: transparent !important;
 }
 
+.vditor-editor .vditor-wysiwyg__block:focus-within > .vditor-wysiwyg__preview {
+  display: none !important;
+}
+
 .vditor-editor .vditor-ir pre.vditor-reset,
 .vditor-editor .vditor-wysiwyg pre.vditor-reset,
 .vditor-editor .vditor-reset {

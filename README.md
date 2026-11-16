@@ -121,9 +121,11 @@ GET  /api/search
 GET  /api/backups
 POST /api/backups/create
 POST /api/backups/:id/restore
+GET  /api/admin/settings
+PUT  /api/admin/settings
 ```
 
-连接服务器后，在文件菜单选择“上传文件夹到服务器”，选择本地文件夹即可批量导入其中的 `.md`、`.markdown`、`.mdown` 和 `.mkd` 文件。相对目录会保留；再次上传同一路径会更新原文档。
+连接服务器后，在文件菜单选择“上传文件夹到服务器”，选择本地文件夹即可批量导入其中的 `.md`、`.markdown`、`.mdown` 和 `.mkd` 文件。相对目录会保留；再次上传同一路径会更新原文档。升级前已经上传且路径被展平的旧文档，需要重新上传一次文件夹才能恢复层级。
 
 ### S3 / MinIO 定时备份
 
@@ -153,6 +155,8 @@ POST /api/backups/create
 ```
 
 `BACKUP_S3_ENDPOINT` 有值时服务端会使用兼容 MinIO 的 Path Style 请求。备份记录可通过 `GET /api/backups` 查看，恢复接口会优先读取本地备份，找不到时从 S3 下载。
+
+管理员登录浏览器版或桌面版后，可在“设置 → 服务器管理”中保存 MCP Key、MCP 用户、备份 Cron 和 MinIO 参数，也可以点击“立即备份”。这些设置会加密保存到服务端数据库，重启后仍然生效。
 
 ### MCP Server
 

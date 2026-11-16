@@ -10,14 +10,17 @@ import { config, isS3Configured } from './config.js'
 import { query } from './db.js'
 
 const execFileAsync = promisify(execFile)
-const s3 = isS3Configured()
-  ? new S3Client({
-      endpoint: config.s3.endpoint || undefined,
-      region: config.s3.region,
-      forcePathStyle: Boolean(config.s3.endpoint),
-      credentials: { accessKeyId: config.s3.accessKeyId, secretAccessKey: config.s3.secretAccessKey }
-    })
-  : null
+let backupScheduler = null
+
+function getS3Client() {
+  if (!isS3Configured()) return null
+  return new S3Client({
+    endpoint: config.s3.endpoint || undefined,
+    region: config.s3.region,
+    forcePathStyle: Boolean(config.s3.endpoint),
+    credentials: { accessKeyId: config.s3.accessKeyId, secretAccessKey: config.s3.secretAccessKey }
+  })
+}
 
 async function sha256(filePath) {
   const hash = crypto.createHash('sha256')
@@ -26,17 +29,20 @@ async function sha256(filePath) {
 }
 
 async function uploadObject(key, filePath) {
+  const s3 = getS3Client()
   if (!s3) return
   await s3.send(new PutObjectCommand({ Bucket: config.s3.bucket, Key: key, Body: createReadStream(filePath) }))
 }
 
 async function downloadObject(key, filePath) {
+  const s3 = getS3Client()
   if (!s3) throw new Error('未配置 S3 备份')
   const response = await s3.send(new GetObjectCommand({ Bucket: config.s3.bucket, Key: key }))
   await fs.writeFile(filePath, Buffer.from(await response.Body.transformToByteArray()))
 }
 
 export async function createBackup({ upload = true } = {}) {
+  const s3 = getS3Client()
   const id = new Date().toISOString().replace(/[:.]/g, '-')
   const temporaryDir = path.join(config.tempDir, `backup-${id}`)
   const backupDir = path.join(config.backupDir, id)
@@ -109,8 +115,11 @@ export async function restoreBackup(id) {
 }
 
 export function startBackupScheduler() {
+  backupScheduler?.stop()
+  backupScheduler = null
   if (!config.backupEnabled) return null
-  return cron.schedule(config.backupSchedule, () => {
+  backupScheduler = cron.schedule(config.backupSchedule, () => {
     createBackup().catch((error) => console.error('Scheduled backup failed:', error.message))
   })
+  return backupScheduler
 }

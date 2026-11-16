@@ -176,7 +176,11 @@ watch(
   fileTree,
   (nodes) => {
     const existingPaths = new Set(collectDirectoryPaths(nodes))
-    expandedDirs.value = new Set([...expandedDirs.value].filter((path) => existingPaths.has(path)))
+    const nextExpandedDirs = new Set([...expandedDirs.value].filter((path) => existingPaths.has(path)))
+    if (nextExpandedDirs.size === 0) {
+      existingPaths.forEach((path) => nextExpandedDirs.add(path))
+    }
+    expandedDirs.value = nextExpandedDirs
   },
   { immediate: true }
 )

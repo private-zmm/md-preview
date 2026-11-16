@@ -236,12 +236,35 @@ export function createRemoteApi(localApi) {
 
   async function importMarkdownFolder(files) {
     const form = new FormData()
-    for (const file of files || []) {
+    const markdownFiles = (files || []).filter((file) => /\.(md|markdown|mdown|mkd)$/i.test(file.name || ''))
+    form.append(
+      'manifest',
+      JSON.stringify(markdownFiles.map((file) => file.webkitRelativePath || file.name))
+    )
+    for (const file of markdownFiles) {
       if (/\.(md|markdown|mdown|mkd)$/i.test(file.name || '')) {
-        form.append('files', file, file.webkitRelativePath || file.name)
+        form.append('files', file, file.name)
       }
     }
     const response = await request('/api/documents/import', { method: 'POST', body: form })
+    return response.json()
+  }
+
+  async function getAdminSettings() {
+    const response = await request('/api/admin/settings')
+    return response.json()
+  }
+
+  async function saveAdminSettings(settings) {
+    const response = await request('/api/admin/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings)
+    })
+    return response.json()
+  }
+
+  async function createBackup() {
+    const response = await request('/api/backups/create', { method: 'POST' })
     return response.json()
   }
 
@@ -293,6 +316,9 @@ export function createRemoteApi(localApi) {
         : localApi.saveImageFile(options)
     },
     importMarkdownFolder,
+    getAdminSettings,
+    saveAdminSettings,
+    createBackup,
     async resolveAssetUrl(markdownFilePath, source, syncSettings) {
       return String(markdownFilePath || '').startsWith('server://')
         ? resolveServerAssetUrl(markdownFilePath, source)

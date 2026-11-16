@@ -5,6 +5,10 @@ const props = defineProps({
   settings: {
     type: Object,
     required: true
+  },
+  api: {
+    type: Object,
+    default: null
   }
 })
 
@@ -12,14 +16,34 @@ const emit = defineEmits(['close', 'status', 'save-image', 'save-server'])
 const activeTab = ref('image')
 const tabs = [
   { key: 'image', label: '图像设置' },
+  { key: 'admin', label: '服务器管理' },
   { key: 'server', label: '服务器连接' }
 ]
+
+const defaultAdminSettings = {
+  mcpApiKey: '',
+  mcpUserEmail: '',
+  backupEnabled: true,
+  backupSchedule: '0 3 * * *',
+  s3Configured: false,
+  s3: {
+    endpoint: '',
+    region: 'auto',
+    bucket: '',
+    accessKeyId: '',
+    secretAccessKey: '',
+    hasSecret: false,
+    prefix: 'mdpreview/backups'
+  }
+}
 
 function cloneSettings(settings) {
   return JSON.parse(JSON.stringify(settings))
 }
 
 const localSettings = ref(cloneSettings(props.settings))
+const adminSettings = ref(cloneSettings(defaultAdminSettings))
+const adminLoading = ref(false)
 
 watch(
   () => props.settings,
@@ -35,8 +59,63 @@ function saveCurrentSettings() {
     return
   }
 
+  if (activeTab.value === 'admin') {
+    saveAdminSettings()
+    return
+  }
+
   emit('save-server', cloneSettings(localSettings.value.server))
 }
+
+async function loadAdminSettings() {
+  if (typeof props.api?.getAdminSettings !== 'function') return
+  adminLoading.value = true
+  try {
+    const payload = await props.api.getAdminSettings()
+    adminSettings.value = {
+      ...cloneSettings(defaultAdminSettings),
+      ...payload,
+      s3: {
+        ...defaultAdminSettings.s3,
+        ...(payload.s3 || {})
+      }
+    }
+  } catch (error) {
+    emit('status', `读取服务器管理配置失败：${error.message}`)
+  } finally {
+    adminLoading.value = false
+  }
+}
+
+async function saveAdminSettings() {
+  if (typeof props.api?.saveAdminSettings !== 'function') {
+    emit('status', '请先连接服务器')
+    return
+  }
+  try {
+    adminSettings.value = await props.api.saveAdminSettings(cloneSettings(adminSettings.value))
+    emit('status', '服务器管理配置已保存')
+  } catch (error) {
+    emit('status', `保存服务器管理配置失败：${error.message}`)
+  }
+}
+
+async function createBackup() {
+  if (typeof props.api?.createBackup !== 'function') {
+    emit('status', '请先连接服务器')
+    return
+  }
+  try {
+    await props.api.createBackup()
+    emit('status', '备份已创建')
+  } catch (error) {
+    emit('status', `创建备份失败：${error.message}`)
+  }
+}
+
+watch(activeTab, (tab) => {
+  if (tab === 'admin') loadAdminSettings()
+})
 
 async function chooseLocalImagePath() {
   const api = window.mdPreview
@@ -194,6 +273,74 @@ function testImageS3() {
           </div>
         </section>
 
+        <section v-else-if="activeTab === 'admin'" class="settings-section">
+          <h2>服务器管理</h2>
+          <p v-if="adminLoading">正在读取服务器配置...</p>
+          <p>这里保存的是服务器端配置，只有管理员账号可以读取和修改。</p>
+
+          <h3>MCP</h3>
+          <div class="settings-form-grid">
+            <label class="settings-field">
+              <span>MCP API Key</span>
+              <input
+                v-model="adminSettings.mcpApiKey"
+                class="settings-input"
+                type="password"
+                placeholder="留空表示使用登录 JWT"
+              />
+            </label>
+            <label class="settings-field">
+              <span>MCP 用户邮箱</span>
+              <input v-model.trim="adminSettings.mcpUserEmail" class="settings-input" type="email" />
+            </label>
+          </div>
+
+          <h3>定时备份</h3>
+          <div class="settings-form-grid">
+            <label class="settings-check">
+              <input v-model="adminSettings.backupEnabled" type="checkbox" />
+              <span>启用定时备份</span>
+            </label>
+            <label class="settings-field">
+              <span>Cron 表达式</span>
+              <input v-model.trim="adminSettings.backupSchedule" class="settings-input" type="text" placeholder="0 3 * * *" />
+            </label>
+          </div>
+
+          <h3>S3 / MinIO</h3>
+          <div class="settings-form-grid">
+            <label class="settings-field">
+              <span>Endpoint</span>
+              <input v-model.trim="adminSettings.s3.endpoint" class="settings-input" type="url" placeholder="http://minio:9000" />
+            </label>
+            <label class="settings-field">
+              <span>Region</span>
+              <input v-model.trim="adminSettings.s3.region" class="settings-input" type="text" />
+            </label>
+            <label class="settings-field">
+              <span>Bucket</span>
+              <input v-model.trim="adminSettings.s3.bucket" class="settings-input" type="text" />
+            </label>
+            <label class="settings-field">
+              <span>Access Key ID</span>
+              <input v-model.trim="adminSettings.s3.accessKeyId" class="settings-input" type="text" />
+            </label>
+            <label class="settings-field">
+              <span>Secret Access Key</span>
+              <input v-model="adminSettings.s3.secretAccessKey" class="settings-input" type="password" placeholder="留空表示保留原值" />
+            </label>
+            <label class="settings-field">
+              <span>备份前缀</span>
+              <input v-model.trim="adminSettings.s3.prefix" class="settings-input" type="text" />
+            </label>
+          </div>
+
+          <div class="settings-panel-actions">
+            <button class="settings-secondary" type="button" @click="loadAdminSettings">读取配置</button>
+            <button class="settings-secondary" type="button" @click="createBackup">立即备份</button>
+          </div>
+        </section>
+
         <section v-else class="settings-section">
           <h2>服务器连接</h2>
 
@@ -239,7 +386,7 @@ function testImageS3() {
     <footer class="settings-page-footer">
       <button class="dialog-button" type="button" @click="emit('close')">返回</button>
       <button class="dialog-button primary settings-save-button" type="button" @click="saveCurrentSettings">
-      {{ activeTab === 'image' ? '保存图像设置' : '保存服务器设置' }}
+      {{ activeTab === 'image' ? '保存图像设置' : activeTab === 'admin' ? '保存服务器管理配置' : '保存服务器设置' }}
       </button>
     </footer>
   </section>

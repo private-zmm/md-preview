@@ -794,6 +794,7 @@ watch(isDirty, (dirty) => api?.setDocumentEdited(dirty), { immediate: true })
     <SettingsPage
       v-if="isSettingsOpen"
       :settings="appSettings"
+      :api="api"
       @close="isSettingsOpen = false"
       @status="handleSettingsStatus"
       @save="saveSettings"
