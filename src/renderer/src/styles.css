@@ -1506,6 +1506,92 @@ button {
   width: 62px;
 }
 
+.folder-picker-dialog {
+  width: min(430px, calc(100vw - 44px));
+  padding: 18px 18px 15px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, #ffffff);
+  border-radius: 8px;
+  background: var(--control-active);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
+  color: var(--text);
+}
+
+.folder-picker-dialog h2 {
+  margin: 0;
+  color: var(--heading);
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.folder-picker-hint {
+  margin: 5px 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.folder-picker-tree {
+  max-height: min(360px, 48vh);
+  overflow: auto;
+  padding: 4px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--editor-bg);
+}
+
+.folder-picker-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 31px;
+  padding-right: 10px;
+  gap: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+
+.folder-picker-row:hover,
+.folder-picker-row.selected {
+  background: var(--hover);
+}
+
+.folder-picker-row.selected {
+  color: var(--heading);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.folder-picker-row.disabled {
+  color: var(--soft);
+  cursor: default;
+  opacity: 0.5;
+}
+
+.folder-picker-row .tree-chevron {
+  width: 14px;
+  height: 14px;
+  flex-basis: 14px;
+}
+
+.folder-picker-row .folder-icon {
+  width: 18px;
+  height: 18px;
+  flex-basis: 18px;
+}
+
+.folder-picker-row .folder-directory-name {
+  font-size: 13px;
+}
+
+.folder-picker-empty {
+  padding: 18px 12px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
 .toast-notification {
   position: fixed;
   top: 44px;

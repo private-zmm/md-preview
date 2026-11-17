@@ -5,6 +5,7 @@ import TopBar from './components/TopBar.vue'
 import VditorEditorPane from './components/VditorEditorPane.vue'
 import StatusBar from './components/StatusBar.vue'
 import FileSidebar from './components/FileSidebar.vue'
+import FolderPickerDialog from './components/FolderPickerDialog.vue'
 import UnsavedDialog from './components/UnsavedDialog.vue'
 import SettingsPage from './components/SettingsPage.vue'
 import { createInitialDocumentState, useDocumentState } from './composables/useDocumentState'
@@ -48,6 +49,7 @@ const folderFiles = ref([])
 const sidebarSearchResultPaths = ref(null)
 const isUnsavedDialogOpen = ref(false)
 const isInputDialogOpen = ref(false)
+const isMoveDialogOpen = ref(false)
 const isSettingsOpen = ref(false)
 const notification = ref(null)
 const editorSessionKey = ref(0)
@@ -59,6 +61,7 @@ const inputDialog = ref({
   title: '',
   value: ''
 })
+const moveDialog = ref({ sourcePath: '', initialPath: '' })
 const appSettings = ref(loadSettings())
 const pendingInsertedImages = ref([])
 
@@ -95,6 +98,7 @@ let removeOpenListener = null
 let removeCloseListener = null
 let unsavedDialogResolver = null
 let inputDialogResolver = null
+let moveDialogResolver = null
 let notificationTimer = null
 let stopSidebarResize = null
 let sidebarSearchTimer = null
@@ -553,23 +557,6 @@ function getMoveTargetDir(file) {
   return parent.replace(/\//g, '\\')
 }
 
-function folderRelativePath(targetPath) {
-  const root = String(folderPath.value || '').replace(/\\/g, '/').replace(/\/$/, '')
-  const target = String(targetPath || '').replace(/\\/g, '/').replace(/\/$/, '')
-  if (!target || target === root) return ''
-  if (target.startsWith(`${root}/`)) return target.slice(root.length + 1)
-  if (folderPath.value === 'server://workspace') return target.replace(/^server:\/\/workspace\/?/, '')
-  return target
-}
-
-function resolveMoveTargetDir(value) {
-  const input = String(value || '').trim().replace(/\\/g, '/')
-  if (!input || input === '.') return folderPath.value
-  if (folderPath.value === 'server://workspace') return `server://workspace\\${input.replace(/^\/+|\/+$/g, '')}`
-  if (/^[A-Za-z]:\//.test(input) || input.startsWith('/')) return input.replace(/\//g, '\\')
-  return `${String(folderPath.value).replace(/[\\/]$/, '')}\\${input.replace(/^\/+|\/+$/g, '').replace(/\//g, '\\')}`
-}
-
 function requestInputName(title, defaultValue = '') {
   inputDialog.value = {
     title,
@@ -592,6 +579,23 @@ function resolveInputDialog(value) {
   const nextValue = typeof value === 'string' ? value.trim() : null
   inputDialogResolver?.(nextValue || null)
   inputDialogResolver = null
+}
+
+function requestMoveTarget(file, defaultPath) {
+  moveDialog.value = {
+    sourcePath: file?.filePath || '',
+    initialPath: defaultPath || folderPath.value
+  }
+  isMoveDialogOpen.value = true
+  return new Promise((resolve) => {
+    moveDialogResolver = resolve
+  })
+}
+
+function resolveMoveTarget(path) {
+  isMoveDialogOpen.value = false
+  moveDialogResolver?.(path || null)
+  moveDialogResolver = null
 }
 
 function applyFolderResult(folder) {
@@ -666,14 +670,13 @@ async function handleFolderAction({ action, file }) {
     }
 
     if (action === 'move') {
-      const defaultTarget = folderRelativePath(getMoveTargetDir(file)) || '.'
-      const targetInput = await requestInputName('移动到目录（相对当前文件夹）', defaultTarget)
-      if (!targetInput) return
+      const targetDirPath = await requestMoveTarget(file, getMoveTargetDir(file))
+      if (!targetDirPath) return
 
       const result = await api.moveFolderItem({
         folderPath: folderPath.value,
         itemPath: file.filePath,
-        targetDirPath: resolveMoveTargetDir(targetInput),
+        targetDirPath,
         file
       })
       applyFolderResult(result.folder)
@@ -976,6 +979,17 @@ watch(isDirty, (dirty) => api?.setDocumentEdited(dirty), { immediate: true })
       @save="resolveUnsavedDecision('save')"
       @discard="resolveUnsavedDecision('discard')"
       @cancel="resolveUnsavedDecision('cancel')"
+    />
+
+    <FolderPickerDialog
+      :open="isMoveDialogOpen"
+      :folder-name="folderName"
+      :folder-path="folderPath"
+      :files="folderFiles"
+      :source-path="moveDialog.sourcePath"
+      :initial-path="moveDialog.initialPath"
+      @confirm="resolveMoveTarget"
+      @cancel="resolveMoveTarget(null)"
     />
 
     <div
