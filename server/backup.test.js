@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
+import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
 import { SourceTextModule, SyntheticModule } from 'node:vm'
 
 // Use real temporary files, substituting the external database, commands and S3 service.
-async function loadBackup(t, { commandError, uploadError, s3 = false } = {}) {
+async function loadBackup(t, { commandError, uploadError, s3 = false, endpoint } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mdpreview-backup-test-'))
   assert.equal(path.dirname(root), path.resolve(os.tmpdir()))
   assert.ok(path.basename(root).startsWith('mdpreview-backup-test-'))
@@ -16,7 +17,7 @@ async function loadBackup(t, { commandError, uploadError, s3 = false } = {}) {
     dataDir: path.join(root, 'data'),
     tempDir: path.join(root, 'data', 'temp'),
     backupDir: path.join(root, 'backups'),
-    s3: { prefix: '/notes/backups/', bucket: 'notes', accessKeyId: 'test-key', secretAccessKey: 'private-secret' }
+    s3: { endpoint, region: 'us-east-1', prefix: '/notes/backups/', bucket: 'notes', accessKeyId: 'test-key', secretAccessKey: 'private-secret' }
   }
   const records = []
   const uploads = []
@@ -37,6 +38,7 @@ async function loadBackup(t, { commandError, uploadError, s3 = false } = {}) {
       PutObjectCommand: class { constructor(input) { this.input = input } },
       GetObjectCommand: class {},
       S3Client: class {
+        destroy() {}
         async send(command) {
           // Consume the file stream even on error so tests do not leak open handles.
           for await (const chunk of command.input.Body) assert.ok(chunk.length)
@@ -46,6 +48,7 @@ async function loadBackup(t, { commandError, uploadError, s3 = false } = {}) {
       }
     }
   }
+  if (endpoint) delete mocks['@aws-sdk/client-s3']
   const module = new SourceTextModule(await fs.readFile(new URL('./backup.js', import.meta.url), 'utf8'))
   await module.link(async (specifier) => {
     const exports = mocks[specifier] || await import(specifier)
@@ -109,5 +112,34 @@ test('successful S3 backup uploads all three files before marking it uploaded', 
   assert.equal(backup.uploads.length, 3)
   assert.ok(backup.uploads.every((key) => key.startsWith(`${result.s3Prefix}/`)))
   assert.equal(backup.records.length, 2)
+  assert.match(backup.records[1].sql, /status = 'uploaded'/)
+})
+
+test('real AWS SDK uploads plain file bodies to a compatible S3 endpoint without streaming trailers', async (t) => {
+  const received = []
+  const server = http.createServer(async (request, response) => {
+    const chunks = []
+    for await (const chunk of request) chunks.push(chunk)
+    const body = Buffer.concat(chunks)
+    const unsupported = request.headers['content-encoding']?.includes('aws-chunked') ||
+      request.headers['x-amz-trailer'] || request.headers['transfer-encoding'] ||
+      Number(request.headers['content-length']) !== body.length
+    received.push({ path: request.url, body, headers: request.headers, unsupported })
+    response.writeHead(unsupported ? 501 : 200, { 'Content-Type': 'application/xml' })
+    response.end(unsupported ? '<Error><Code>NotImplemented</Code><Message>Streaming trailers are unsupported</Message></Error>' : '')
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  t.after(() => new Promise((resolve) => {
+    server.close(resolve)
+    server.closeAllConnections()
+  }))
+  const endpoint = `http://127.0.0.1:${server.address().port}`
+  const backup = await loadBackup(t, { s3: true, endpoint })
+  const result = await backup.createBackup()
+  assert.equal(received.length, 3)
+  assert.ok(received.every((request) => !request.unsupported && request.path.startsWith(`/notes/${result.s3Prefix}/`)))
+  assert.equal(received[0].body.toString(), 'database contents')
+  assert.equal(received[1].body.toString(), 'document and image contents')
+  assert.equal(JSON.parse(received[2].body.toString()).id, result.id)
   assert.match(backup.records[1].sql, /status = 'uploaded'/)
 })

@@ -18,6 +18,9 @@ function getS3Client() {
     endpoint: config.s3.endpoint || undefined,
     region: config.s3.region,
     forcePathStyle: Boolean(config.s3.endpoint),
+    // Compatible S3 services may reject AWS streaming checksum trailers.
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
     credentials: { accessKeyId: config.s3.accessKeyId, secretAccessKey: config.s3.secretAccessKey }
   })
 }
@@ -29,9 +32,21 @@ async function sha256(filePath) {
 }
 
 async function uploadObject(key, filePath) {
+  const { size } = await fs.stat(filePath)
   const s3 = getS3Client()
   if (!s3) return
-  await s3.send(new PutObjectCommand({ Bucket: config.s3.bucket, Key: key, Body: createReadStream(filePath) }))
+  const body = createReadStream(filePath)
+  try {
+    await s3.send(new PutObjectCommand({
+      Bucket: config.s3.bucket,
+      Key: key,
+      Body: body,
+      ContentLength: size
+    }))
+  } finally {
+    body.destroy()
+    s3.destroy()
+  }
 }
 
 async function downloadObject(key, filePath) {

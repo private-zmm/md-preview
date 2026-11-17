@@ -45,6 +45,7 @@ const localSettings = ref(cloneSettings(props.settings))
 const adminSettings = ref(cloneSettings(defaultAdminSettings))
 const adminLoading = ref(false)
 const backupLoading = ref(false)
+const backupError = ref('')
 
 watch(
   () => props.settings,
@@ -108,11 +109,13 @@ async function createBackup() {
     return
   }
   backupLoading.value = true
+  backupError.value = ''
   try {
     const result = await props.api.createBackup()
     emit('status', result.backup?.s3Prefix ? '备份已创建并上传至 S3' : '本地备份已创建')
   } catch (error) {
-    emit('status', `创建备份失败：${error.message}`)
+    backupError.value = `创建备份失败：${error.message}`
+    emit('status', backupError.value)
   } finally {
     backupLoading.value = false
   }
@@ -344,6 +347,7 @@ function testImageS3() {
             <button class="settings-secondary" type="button" @click="loadAdminSettings">读取配置</button>
             <button class="settings-secondary" type="button" :disabled="backupLoading" @click="createBackup">{{ backupLoading ? '正在备份…' : '立即备份' }}</button>
           </div>
+          <p v-if="backupError" class="settings-backup-error" role="alert">{{ backupError }}</p>
         </section>
 
         <section v-else class="settings-section">
