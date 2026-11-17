@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld("mdPreview", {
   createMarkdownFileInFolder: (options) => ipcRenderer.invoke("document:create-in-folder", options),
   createFolderInFolder: (options) => ipcRenderer.invoke("document:create-folder-in-folder", options),
   renameFolderItem: (options) => ipcRenderer.invoke("document:rename-folder-item", options),
+  moveFolderItem: (options) => ipcRenderer.invoke("document:move-folder-item", options),
   duplicateFolderFile: (options) => ipcRenderer.invoke("document:duplicate-folder-file", options),
   deleteFolderItem: (options) => ipcRenderer.invoke("document:delete-folder-item", options),
   showFolderItem: (itemPath) => ipcRenderer.invoke("document:show-folder-item", itemPath),

@@ -41,44 +41,79 @@ async function downloadObject(key, filePath) {
   await fs.writeFile(filePath, Buffer.from(await response.Body.transformToByteArray()))
 }
 
+function backupError(stage, error) {
+  let detail = String(error.stderr || error.message || error.code || '未知错误').trim()
+  // execFile errors include the complete command, which may contain database credentials.
+  detail = detail.replaceAll(config.databaseUrl, '[数据库连接]')
+  for (const secret of [config.s3.accessKeyId, config.s3.secretAccessKey]) {
+    if (secret) detail = detail.replaceAll(secret, '[已隐藏]')
+  }
+  if (error.code === 'ENOENT') detail = '缺少备份命令，请更新服务镜像'
+  if (/server version mismatch|aborting because of server version/i.test(detail)) {
+    detail = 'PostgreSQL 备份工具版本低于数据库版本，请更新服务镜像'
+  }
+  return new Error(`${stage}：${detail.slice(0, 600)}`)
+}
+
+async function runBackupStep(stage, run) {
+  try {
+    return await run()
+  } catch (error) {
+    throw backupError(stage, error)
+  }
+}
+
 export async function createBackup({ upload = true } = {}) {
-  const s3 = getS3Client()
-  const id = new Date().toISOString().replace(/[:.]/g, '-')
-  const temporaryDir = path.join(config.tempDir, `backup-${id}`)
+  const shouldUpload = upload && isS3Configured()
+  const id = `${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomUUID()}`
+  // Stage on the backup volume so publishing also works with a separate BACKUP_DIR mount.
+  const temporaryDir = path.join(config.backupDir, `.backup-${id}`)
   const backupDir = path.join(config.backupDir, id)
-  await fs.mkdir(temporaryDir, { recursive: true })
+  await runBackupStep('创建备份目录失败', () => fs.mkdir(temporaryDir, { recursive: true }))
 
-  const databaseDump = path.join(temporaryDir, 'database.dump')
-  const filesArchive = path.join(temporaryDir, 'files.tar.gz')
-  await execFileAsync('pg_dump', ['--dbname', config.databaseUrl, '--format=custom', '--file', databaseDump])
-  await execFileAsync('tar', ['-czf', filesArchive, '-C', config.dataDir, 'documents', 'assets'])
+  try {
+    const databaseDump = path.join(temporaryDir, 'database.dump')
+    const filesArchive = path.join(temporaryDir, 'files.tar.gz')
+    await runBackupStep('数据库备份失败', () => execFileAsync('pg_dump', ['--dbname', config.databaseUrl, '--format=custom', '--file', databaseDump]))
+    await runBackupStep('文档和图片打包失败', () => execFileAsync('tar', ['-czf', filesArchive, '-C', config.dataDir, 'documents', 'assets']))
 
-  const manifest = {
-    id,
-    createdAt: new Date().toISOString(),
-    files: {
-      databaseDump: { sha256: await sha256(databaseDump), size: (await fs.stat(databaseDump)).size },
-      filesArchive: { sha256: await sha256(filesArchive), size: (await fs.stat(filesArchive)).size }
+    const manifest = {
+      id,
+      createdAt: new Date().toISOString(),
+      files: {
+        databaseDump: { sha256: await sha256(databaseDump), size: (await fs.stat(databaseDump)).size },
+        filesArchive: { sha256: await sha256(filesArchive), size: (await fs.stat(filesArchive)).size }
+      }
     }
-  }
-  await fs.writeFile(path.join(temporaryDir, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8')
-  await fs.mkdir(config.backupDir, { recursive: true })
-  await fs.rename(temporaryDir, backupDir)
+    await runBackupStep('保存本地备份失败', async () => {
+      await fs.writeFile(path.join(temporaryDir, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8')
+      await fs.rename(temporaryDir, backupDir)
+    })
 
-  const s3Prefix = `${config.s3.prefix}/${id}`
-  if (upload && s3) {
-    await uploadObject(`${s3Prefix}/database.dump`, path.join(backupDir, 'database.dump'))
-    await uploadObject(`${s3Prefix}/files.tar.gz`, path.join(backupDir, 'files.tar.gz'))
-    await uploadObject(`${s3Prefix}/manifest.json`, path.join(backupDir, 'manifest.json'))
-  }
+    const prefix = config.s3.prefix.replace(/^\/+|\/+$/g, '')
+    const s3Prefix = prefix ? `${prefix}/${id}` : id
 
-  const sizeBytes = manifest.files.databaseDump.size + manifest.files.filesArchive.size
-  await query(
-    `INSERT INTO backup_records (id, local_path, s3_prefix, status, size_bytes, manifest)
-     VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
-    [id, backupDir, s3 ? s3Prefix : null, s3 ? 'uploaded' : 'created', sizeBytes, JSON.stringify(manifest)]
-  )
-  return { ...manifest, localPath: backupDir, s3Prefix: s3 ? s3Prefix : null }
+    const sizeBytes = manifest.files.databaseDump.size + manifest.files.filesArchive.size
+    await runBackupStep('登记备份记录失败', () => query(
+      `INSERT INTO backup_records (id, local_path, s3_prefix, status, size_bytes, manifest)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
+      [id, backupDir, null, 'created', sizeBytes, JSON.stringify(manifest)]
+    ))
+    if (shouldUpload) {
+      await runBackupStep('本地备份已保存，但上传 S3 失败', async () => {
+        await uploadObject(`${s3Prefix}/database.dump`, path.join(backupDir, 'database.dump'))
+        await uploadObject(`${s3Prefix}/files.tar.gz`, path.join(backupDir, 'files.tar.gz'))
+        await uploadObject(`${s3Prefix}/manifest.json`, path.join(backupDir, 'manifest.json'))
+      })
+      await runBackupStep('更新备份记录失败', () => query(
+        "UPDATE backup_records SET s3_prefix = $1, status = 'uploaded' WHERE id = $2",
+        [s3Prefix, id]
+      ))
+    }
+    return { ...manifest, localPath: backupDir, s3Prefix: shouldUpload ? s3Prefix : null }
+  } finally {
+    await fs.rm(temporaryDir, { recursive: true, force: true }).catch(() => {})
+  }
 }
 
 export async function listBackups() {

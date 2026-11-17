@@ -393,7 +393,14 @@ app.delete('/api/mcp/servers/:id', { preHandler: authRequired }, async (request,
 })
 
 app.get('/api/backups', { preHandler: adminRequired }, async () => ({ backups: await listBackups() }))
-app.post('/api/backups/create', { preHandler: adminRequired }, async () => ({ backup: await createBackup() }))
+app.post('/api/backups/create', { preHandler: adminRequired }, async (request, reply) => {
+  try {
+    return { backup: await createBackup() }
+  } catch (error) {
+    request.log.error({ message: error.message }, 'Backup creation failed')
+    return reply.code(500).send({ error: error.message })
+  }
+})
 app.post('/api/backups/:id/restore', { preHandler: adminRequired }, async (request) => ({ result: await restoreBackup(request.params.id) }))
 
 app.get('/api/admin/settings', { preHandler: adminRequired }, async () => getServerSettings())

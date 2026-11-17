@@ -263,6 +263,28 @@ async function renameFolderItem({ folderPath, itemPath, newName }) {
     file: stat.isFile() && isMarkdownFile(targetPath) ? await readMarkdownFile(targetPath) : null
   };
 }
+async function moveFolderItem({ folderPath, itemPath, targetDirPath }) {
+  const root = path.resolve(folderPath);
+  const sourcePath = assertInsideFolder(root, itemPath);
+  const targetDir = assertInsideFolder(root, targetDirPath || root);
+  if (sourcePath === root) throw new Error("不能移动当前打开的根文件夹");
+  const [sourceStat, targetStat] = await Promise.all([fs.stat(sourcePath), fs.stat(targetDir)]);
+  if (!targetStat.isDirectory()) throw new Error("目标路径不是文件夹");
+  if (sourceStat.isDirectory() && isPathInside(sourcePath, targetDir)) {
+    throw new Error("不能移动到自身或子文件夹内");
+  }
+  const targetPath = assertInsideFolder(root, path.join(targetDir, path.basename(sourcePath)));
+  if (sourcePath.toLowerCase() === targetPath.toLowerCase()) throw new Error("目标位置与当前相同");
+  const exists = await fs.access(targetPath).then(() => true).catch(() => false);
+  if (exists) throw new Error("目标位置已存在同名文件或文件夹");
+  await fs.rename(sourcePath, targetPath);
+  return {
+    oldPath: sourcePath,
+    newPath: targetPath,
+    folder: await refreshMarkdownFolder(root),
+    file: sourceStat.isFile() && isMarkdownFile(targetPath) ? await readMarkdownFile(targetPath) : null
+  };
+}
 async function duplicateMarkdownFile({ folderPath, filePath }) {
   const root = path.resolve(folderPath);
   const sourcePath = assertInsideFolder(root, filePath);
@@ -829,6 +851,7 @@ ipcMain.handle("document:refresh-folder", (_event, folderPath) => refreshMarkdow
 ipcMain.handle("document:create-in-folder", (_event, options) => createMarkdownFileInFolder(options));
 ipcMain.handle("document:create-folder-in-folder", (_event, options) => createFolderInFolder(options));
 ipcMain.handle("document:rename-folder-item", (_event, options) => renameFolderItem(options));
+ipcMain.handle("document:move-folder-item", (_event, options) => moveFolderItem(options));
 ipcMain.handle("document:duplicate-folder-file", (_event, options) => duplicateMarkdownFile(options));
 ipcMain.handle("document:delete-folder-item", (_event, options) => deleteFolderItem(options));
 ipcMain.handle("document:show-folder-item", (_event, itemPath) => showFolderItem(itemPath));

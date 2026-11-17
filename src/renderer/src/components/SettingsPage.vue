@@ -44,6 +44,7 @@ function cloneSettings(settings) {
 const localSettings = ref(cloneSettings(props.settings))
 const adminSettings = ref(cloneSettings(defaultAdminSettings))
 const adminLoading = ref(false)
+const backupLoading = ref(false)
 
 watch(
   () => props.settings,
@@ -101,15 +102,19 @@ async function saveAdminSettings() {
 }
 
 async function createBackup() {
+  if (backupLoading.value) return
   if (typeof props.api?.createBackup !== 'function') {
     emit('status', '请先连接服务器')
     return
   }
+  backupLoading.value = true
   try {
-    await props.api.createBackup()
-    emit('status', '备份已创建')
+    const result = await props.api.createBackup()
+    emit('status', result.backup?.s3Prefix ? '备份已创建并上传至 S3' : '本地备份已创建')
   } catch (error) {
     emit('status', `创建备份失败：${error.message}`)
+  } finally {
+    backupLoading.value = false
   }
 }
 
@@ -337,7 +342,7 @@ function testImageS3() {
 
           <div class="settings-panel-actions">
             <button class="settings-secondary" type="button" @click="loadAdminSettings">读取配置</button>
-            <button class="settings-secondary" type="button" @click="createBackup">立即备份</button>
+            <button class="settings-secondary" type="button" :disabled="backupLoading" @click="createBackup">{{ backupLoading ? '正在备份…' : '立即备份' }}</button>
           </div>
         </section>
 
