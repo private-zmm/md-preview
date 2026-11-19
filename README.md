@@ -181,7 +181,9 @@ Authorization: Bearer 一串长随机字符串
 Content-Type: application/json
 ```
 
-当前提供的工具包括 `list_documents`、`read_document`、`create_document`、`update_document`、`delete_document`、`search_documents` 和 `duplicate_document`。如果不配置 `MCP_API_KEY`，也可以使用登录接口返回的 JWT 访问 MCP，但 JWT 会按 `ACCESS_TOKEN_MINUTES` 过期。
+当前提供的工具包括 `list_documents`、`read_document`、`create_document`、`update_document`、`move_document`、`delete_document`、`search_documents` 和 `duplicate_document`。如果不配置 `MCP_API_KEY`，也可以使用登录接口返回的 JWT 访问 MCP，但 JWT 会按 `ACCESS_TOKEN_MINUTES` 过期。
+
+`move_document` 接收文档 `id` 和包含文件名的目标 `relativePath`，例如 `归档/部署说明.md`。只传文件名可移到根目录，也可通过修改文件名同时重命名。目标同名文件不会被覆盖；移动保持文档 ID、正文和附件关联不变。
 
 桌面端打开“设置 → 服务器连接”，填写服务地址、邮箱和密码后登录。登录后，打开文件夹、保存、重命名、复制和删除操作会直接作用于服务端数据；未登录时仍使用原来的本地文件模式。
 

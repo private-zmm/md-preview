@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 contextBridge.exposeInMainWorld("mdPreview", {
+  createWindow: () => ipcRenderer.invoke("window:create"),
   getInitialFile: () => ipcRenderer.invoke("document:get-initial-file"),
   createMarkdownFile: (folderPath) => ipcRenderer.invoke("document:create", folderPath),
   openMarkdownFile: (filePath) => ipcRenderer.invoke("document:open", filePath),

@@ -72,6 +72,10 @@ const hasSidebar = computed(() => Boolean(folderName.value))
 const workspaceClass = computed(() => `workspace ${hasSidebar.value ? 'has-sidebar' : ''}`)
 const workspaceStyle = computed(() => ({ '--sidebar-width': `${sidebarWidth.value}px` }))
 const assetBasePath = computed(() => state.filePath || folderPath.value || null)
+const documentFolderPath = computed(() => {
+  if (state.filePath && state.filePath.startsWith('server://') !== folderPath.value.startsWith('server://')) return null
+  return folderPath.value || null
+})
 const currentOutline = computed(() => {
   let headingIndex = 0
 
@@ -141,7 +145,7 @@ async function handleSidebarSearch(query) {
   const token = sidebarSearchToken
   window.clearTimeout(sidebarSearchTimer)
 
-  if (!text || !api.isServerMode?.() || typeof api.searchDocuments !== 'function') {
+  if (!text || folderPath.value !== 'server://workspace' || !api.isServerMode?.() || typeof api.searchDocuments !== 'function') {
     sidebarSearchResultPaths.value = null
     return
   }
@@ -738,6 +742,14 @@ async function createFile() {
   setStatus('已新建未保存文档')
 }
 
+async function createWindow() {
+  try {
+    await api.createWindow()
+  } catch (error) {
+    setStatus(`新建窗口失败：${error.message}`)
+  }
+}
+
 async function openFolder() {
   try {
     const result = await api.openMarkdownFolder()
@@ -749,6 +761,17 @@ async function openFolder() {
     setStatus(`已打开文件夹 ${result.folderName}，找到 ${countMarkdownFiles(folderFiles.value)} 个 Markdown 文件`)
   } catch (error) {
     setStatus(`打开文件夹失败：${error.message}`)
+  }
+}
+
+async function openServerFolder() {
+  try {
+    const result = await api.openServerMarkdownFolder()
+    applyFolderResult(result)
+    setStatus(`已打开服务器文件夹，找到 ${countMarkdownFiles(result.files)} 个 Markdown 文件`)
+  } catch (error) {
+    setStatus(`打开服务器文件夹失败：${error.message}`)
+    showNotification(error.message, 'error')
   }
 }
 
@@ -789,7 +812,7 @@ async function saveFile() {
   try {
     const contentToSave = editorPaneRef.value?.getValue?.() ?? state.content
     state.content = contentToSave
-    const result = await api.saveMarkdownFile(state.filePath, contentToSave, folderPath.value || null)
+    const result = await api.saveMarkdownFile(state.filePath, contentToSave, documentFolderPath.value)
     if (result?.canceled) return false
 
     markSaved(result, contentToSave)
@@ -810,7 +833,7 @@ async function saveFileAs() {
   try {
     const contentToSave = editorPaneRef.value?.getValue?.() ?? state.content
     state.content = contentToSave
-    const result = await api.saveMarkdownFileAs(contentToSave, folderPath.value || null)
+    const result = await api.saveMarkdownFileAs(contentToSave, documentFolderPath.value, state.filePath)
     if (result?.canceled) return false
 
     markSaved(result, contentToSave)
@@ -836,7 +859,8 @@ function handleKeyboard(event) {
 
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n') {
     event.preventDefault()
-    createFile()
+    if (event.shiftKey) createWindow()
+    else createFile()
   }
 
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'o') {
@@ -902,8 +926,10 @@ watch(isDirty, (dirty) => api?.setDocumentEdited(dirty), { immediate: true })
       :is-dirty="isDirty"
       :theme="state.theme"
       @create="createFile"
+      @new-window="createWindow"
       @open="openFile"
       @open-folder="openFolder"
+      @open-server-folder="openServerFolder"
       @upload-folder="uploadFolder"
       @save="saveFile"
       @save-as="saveFileAs"
@@ -944,17 +970,21 @@ watch(isDirty, (dirty) => api?.setDocumentEdited(dirty), { immediate: true })
         v-model="state.content"
         :history-key="editorSessionKey"
         :file-path="state.filePath"
-        :default-folder-path="folderPath"
+        :default-folder-path="documentFolderPath"
         :image-save-path="activeImageConfig.imageSavePath"
         :sync-settings="activeImageConfig.syncSettings"
-        :outline="currentOutline"
         :theme="state.theme"
         @status="setStatus"
         @image-inserted="registerPendingImage"
       />
     </section>
 
-    <StatusBar :status="statusText" :stats="wordCount" />
+    <StatusBar
+      :status="statusText"
+      :stats="wordCount"
+      :outline="isSettingsOpen ? [] : currentOutline"
+      @select-outline="editorPaneRef?.scrollToOutline($event)"
+    />
 
     <div
       v-if="notification"

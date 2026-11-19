@@ -16,6 +16,7 @@ import { createBackup, listBackups, restoreBackup, startBackupScheduler } from '
 import { encryptJson } from './secure.js'
 import { handleMcpRequest, mcpAuthRequired } from './mcp.js'
 import { getServerSettings, loadServerSettings, saveServerSettings } from './settings.js'
+import { moveDocument, normalizeMovePath } from './documentMoves.js'
 
 const app = Fastify({ logger: true, bodyLimit: 100 * 1024 * 1024 })
 
@@ -83,16 +84,6 @@ function normalizeImportedPath(value) {
     .replace(/\\/g, '/')
     .split('/')
     .filter((part) => part && part !== '.' && part !== '..')
-  return parts.join('/')
-}
-
-function normalizeMovePath(value, { allowEmpty = false } = {}) {
-  const raw = String(value || '').replace(/\\/g, '/').trim()
-  if (!raw && allowEmpty) return ''
-  if (!raw || raw.startsWith('/') || /^[A-Za-z]:[\\/]/.test(raw)) throw new Error('目标路径必须是当前工作区内的相对路径')
-
-  const parts = raw.split('/').filter(Boolean)
-  if (parts.some((part) => part === '.' || part === '..')) throw new Error('目标路径不能包含 . 或 ..')
   return parts.join('/')
 }
 
@@ -178,34 +169,12 @@ app.put('/api/documents/:id', { preHandler: authRequired }, async (request, repl
 })
 
 app.put('/api/documents/:id/move', { preHandler: authRequired }, async (request, reply) => {
-  let relativePath
   try {
-    relativePath = normalizeMovePath(request.body?.relativePath)
+    return await moveDocument(request.user.sub, request.params.id, request.body?.relativePath)
   } catch (error) {
-    return reply.code(400).send({ error: error.message })
+    if (!error.statusCode) throw error
+    return reply.code(error.statusCode).send({ error: error.message })
   }
-  if (!/\.(md|markdown|mdown|mkd)$/i.test(relativePath)) {
-    return reply.code(400).send({ error: '目标路径必须是 Markdown 文件路径' })
-  }
-
-  const result = await query('SELECT * FROM documents WHERE id = $1 AND user_id = $2', [request.params.id, request.user.sub])
-  const document = result.rows[0]
-  if (!document) return reply.code(404).send({ error: '文档不存在' })
-  if (document.relative_path === relativePath) return reply.code(400).send({ error: '目标位置与当前相同' })
-
-  const conflict = await query(
-    'SELECT id FROM documents WHERE user_id = $1 AND relative_path = $2 AND id <> $3',
-    [request.user.sub, relativePath, document.id]
-  )
-  if (conflict.rows[0]) return reply.code(409).send({ error: '目标位置已存在同名文件' })
-
-  const title = path.posix.basename(relativePath)
-  const updated = await query(
-    `UPDATE documents SET title = $1, relative_path = $2, updated_at = NOW()
-     WHERE id = $3 RETURNING id, title, relative_path, version, updated_at`,
-    [title, relativePath, document.id]
-  )
-  return updated.rows[0]
 })
 
 app.post('/api/documents/:id/duplicate', { preHandler: authRequired }, async (request, reply) => {

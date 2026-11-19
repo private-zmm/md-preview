@@ -22,6 +22,10 @@ function documentIdFromPath(filePath) {
   return match?.[1] || null
 }
 
+function isServerPath(filePath) {
+  return String(filePath || '').startsWith('server://')
+}
+
 function serverRelativePathFromPath(itemPath) {
   return String(itemPath || '')
     .replace(/^server:\/\/workspace[\\/]?/, '')
@@ -363,18 +367,20 @@ export function createRemoteApi(localApi) {
     deleteServerFolderItem,
     resolveServerAssetUrl,
     async openMarkdownFile(filePath) {
-      return isServerMode() ? openServerMarkdownFile(filePath) : localApi.openMarkdownFile(filePath)
+      return isServerPath(filePath) ? openServerMarkdownFile(filePath) : localApi.openMarkdownFile(filePath)
     },
     async openMarkdownFolder() {
-      return isServerMode() ? openServerMarkdownFolder() : localApi.openMarkdownFolder()
+      return localApi.openMarkdownFolder()
     },
     async saveMarkdownFile(filePath, content, defaultFolderPath) {
-      return String(filePath || '').startsWith('server://') || isServerMode()
+      return isServerPath(filePath || defaultFolderPath)
         ? saveServerMarkdownFile(filePath, content)
-        : localApi.saveMarkdownFile(filePath, content, defaultFolderPath)
+        : localApi.saveMarkdownFile(filePath, content, isServerPath(defaultFolderPath) ? null : defaultFolderPath)
     },
-    async saveMarkdownFileAs(content, defaultFolderPath) {
-      return isServerMode() ? saveServerMarkdownFileAs(content) : localApi.saveMarkdownFileAs(content, defaultFolderPath)
+    async saveMarkdownFileAs(content, defaultFolderPath, filePath = null) {
+      return isServerPath(filePath || defaultFolderPath)
+        ? saveServerMarkdownFileAs(content)
+        : localApi.saveMarkdownFileAs(content, isServerPath(defaultFolderPath) ? null : defaultFolderPath)
     },
     async saveImageFile(options) {
       return String(options?.markdownFilePath || '').startsWith('server://')
@@ -397,21 +403,21 @@ export function createRemoteApi(localApi) {
         : localApi.refreshMarkdownFolder(folderPath)
     },
     async createMarkdownFileInFolder(options) {
-      return isServerMode() ? createServerMarkdownFileInFolder(options) : localApi.createMarkdownFileInFolder(options)
+      return isServerPath(options.folderPath) ? createServerMarkdownFileInFolder(options) : localApi.createMarkdownFileInFolder(options)
     },
     async renameFolderItem(options) {
-      return isServerMode() ? renameServerFolderItem(options) : localApi.renameFolderItem(options)
+      return isServerPath(options.itemPath) ? renameServerFolderItem(options) : localApi.renameFolderItem(options)
     },
     async moveFolderItem(options) {
-      if (isServerMode()) return moveServerFolderItem(options)
+      if (isServerPath(options.itemPath)) return moveServerFolderItem(options)
       if (typeof localApi.moveFolderItem !== 'function') throw new Error('当前运行环境不支持移动文件')
       return localApi.moveFolderItem(options)
     },
     async duplicateFolderFile(options) {
-      return isServerMode() ? duplicateServerFolderFile(options) : localApi.duplicateFolderFile(options)
+      return isServerPath(options.filePath) ? duplicateServerFolderFile(options) : localApi.duplicateFolderFile(options)
     },
     async deleteFolderItem(options) {
-      return isServerMode() ? deleteServerFolderItem(options) : localApi.deleteFolderItem(options)
+      return isServerPath(options.itemPath) ? deleteServerFolderItem(options) : localApi.deleteFolderItem(options)
     }
   }
 

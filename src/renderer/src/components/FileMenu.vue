@@ -10,8 +10,10 @@ const emit = defineEmits([
   'toggle-menu',
   'close-menu',
   'create',
+  'new-window',
   'open',
   'open-folder',
+  'open-server-folder',
   'upload-folder',
   'save',
   'save-as',
@@ -21,14 +23,20 @@ const emit = defineEmits([
 
 const menuGroups = [
   [
-    { label: '新建', shortcut: 'Ctrl+N', event: 'create' },
-    { label: '打开...', shortcut: 'Ctrl+O', event: 'open' },
-    { label: '打开文件夹...', shortcut: 'Ctrl+Shift+O', event: 'open-folder' },
-    { label: '上传文件夹到服务器...', event: 'upload-folder' }
+    { label: '新建文件', shortcut: 'Ctrl+N', event: 'create' },
+    { label: '新建窗口', shortcut: 'Ctrl+Shift+N', event: 'new-window' }
+  ],
+  [
+    { label: '打开本地文件…', shortcut: 'Ctrl+O', event: 'open' },
+    { label: '打开本地文件夹…', shortcut: 'Ctrl+Shift+O', event: 'open-folder' }
+  ],
+  [
+    { label: '打开服务器文件夹', event: 'open-server-folder' },
+    { label: '上传文件夹到服务器…', event: 'upload-folder' }
   ],
   [
     { label: '保存', shortcut: 'Ctrl+S', event: 'save' },
-    { label: '另存为...', shortcut: 'Ctrl+Shift+S', event: 'save-as' }
+    { label: '另存为…', shortcut: 'Ctrl+Shift+S', event: 'save-as' }
   ]
 ]
 
@@ -94,7 +102,7 @@ function runExport(format) {
       </div>
       <div class="file-menu-separator"></div>
       <button class="file-menu-item" type="button" role="menuitem" @click="runMenuAction('settings')">
-        <span>设置...</span>
+        <span>设置…</span>
       </button>
     </div>
   </div>

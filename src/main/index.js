@@ -5,9 +5,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createHash, createHmac } from 'node:crypto'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-let mainWindow
-let initialFilePath = null
-let isForceClosing = false
+const windowStates = new Map()
+const pendingFilePaths = []
 
 const markdownExtensions = new Set(['.md', '.markdown', '.mdown', '.mkd'])
 const maxFolderFiles = 1000
@@ -41,11 +40,10 @@ function normalizeFilePathArg(arg) {
 function queueSystemFileOpen(filePath) {
   if (!filePath) return
 
-  const normalized = path.resolve(filePath)
-  initialFilePath = normalized
-
-  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isLoading()) return
-  mainWindow.webContents.send('document:open-from-system', normalized)
+  const normalized = normalizeFilePathArg(filePath)
+  if (!normalized) return
+  if (!app.isReady()) pendingFilePaths.push(normalized)
+  else createWindow(normalized)
 }
 
 function stripMarkdown(value) {
@@ -102,10 +100,8 @@ function getAppIconPath() {
     : path.join(__dirname, '../../build/icon.ico')
 }
 
-function createWindow() {
-  isForceClosing = false
-
-  mainWindow = new BrowserWindow({
+function createWindow(filePath = null) {
+  const mainWindow = new BrowserWindow({
     width: 1240,
     height: 820,
     minWidth: 860,
@@ -123,6 +119,7 @@ function createWindow() {
     }
   })
 
+  windowStates.set(mainWindow, { initialFilePath: filePath })
   Menu.setApplicationMenu(null)
 
   mainWindow.once('ready-to-show', () => {
@@ -135,14 +132,12 @@ function createWindow() {
   })
 
   mainWindow.on('close', (event) => {
-    if (isForceClosing) return
-
     event.preventDefault()
     mainWindow.webContents.send('window:request-close')
   })
 
   mainWindow.on('closed', () => {
-    mainWindow = null
+    windowStates.delete(mainWindow)
   })
 
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -150,6 +145,8 @@ function createWindow() {
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
+
+  return mainWindow
 }
 
 async function readMarkdownFile(filePath) {
@@ -164,12 +161,12 @@ async function readMarkdownFile(filePath) {
   }
 }
 
-async function openMarkdownFile(filePath) {
+async function openMarkdownFile(filePath, parentWindow) {
   if (filePath) {
     return readMarkdownFile(filePath)
   }
 
-  const result = await dialog.showOpenDialog(mainWindow, {
+  const result = await dialog.showOpenDialog(parentWindow, {
     title: '打开 Markdown 文件',
     properties: ['openFile'],
     filters: [
@@ -223,8 +220,8 @@ async function collectMarkdownFiles(folderPath) {
   return files
 }
 
-async function openMarkdownFolder() {
-  const result = await dialog.showOpenDialog(mainWindow, {
+async function openMarkdownFolder(parentWindow) {
+  const result = await dialog.showOpenDialog(parentWindow, {
     title: '打开 Markdown 文件夹',
     properties: ['openDirectory']
   })
@@ -407,11 +404,11 @@ function showFolderItem(itemPath) {
   return { ok: true }
 }
 
-async function createMarkdownFile(folderPath) {
+async function createMarkdownFile(folderPath, parentWindow) {
   const baseFolder = folderPath ? path.resolve(folderPath) : null
   const defaultPath = baseFolder ? path.join(baseFolder, 'Untitled.md') : 'Untitled.md'
 
-  const result = await dialog.showSaveDialog(mainWindow, {
+  const result = await dialog.showSaveDialog(parentWindow, {
     title: '新建 Markdown 文件',
     defaultPath,
     filters: [
@@ -440,9 +437,9 @@ async function createMarkdownFile(folderPath) {
   }
 }
 
-async function saveMarkdownFile(filePath, content, defaultFolderPath = null) {
+async function saveMarkdownFile(filePath, content, defaultFolderPath = null, parentWindow) {
   if (!filePath) {
-    return saveMarkdownFileAs(content, defaultFolderPath)
+    return saveMarkdownFileAs(content, defaultFolderPath, parentWindow)
   }
 
   const normalized = path.resolve(filePath)
@@ -460,12 +457,12 @@ async function saveMarkdownFile(filePath, content, defaultFolderPath = null) {
   }
 }
 
-async function saveMarkdownFileAs(content, defaultFolderPath = null) {
+async function saveMarkdownFileAs(content, defaultFolderPath = null, parentWindow) {
   const defaultPath = defaultFolderPath
     ? path.join(path.resolve(defaultFolderPath), 'Untitled.md')
     : 'Untitled.md'
 
-  const result = await dialog.showSaveDialog(mainWindow, {
+  const result = await dialog.showSaveDialog(parentWindow, {
     title: '另存为 Markdown 文件',
     defaultPath,
     filters: [
@@ -483,7 +480,7 @@ async function saveMarkdownFileAs(content, defaultFolderPath = null) {
     filePath = `${filePath}.md`
   }
 
-  return saveMarkdownFile(filePath, content, defaultFolderPath)
+  return saveMarkdownFile(filePath, content, defaultFolderPath, parentWindow)
 }
 
 function getExportConfig(format) {
@@ -513,11 +510,11 @@ function replaceFileExtension(fileName, extension) {
   return `${parsed.name || 'Untitled'}.${extension}`
 }
 
-async function chooseExportPath(format, fileName) {
+async function chooseExportPath(format, fileName, parentWindow) {
   const config = getExportConfig(format)
   if (!config) throw new Error('不支持的导出格式')
 
-  const result = await dialog.showSaveDialog(mainWindow, {
+  const result = await dialog.showSaveDialog(parentWindow, {
     title: config.title,
     defaultPath: replaceFileExtension(fileName, config.extension),
     filters: [...config.filters, { name: 'All Files', extensions: ['*'] }]
@@ -601,10 +598,10 @@ async function exportPng(html, filePath) {
   }
 }
 
-async function exportMarkdownDocument({ format, html, fileName }) {
+async function exportMarkdownDocument({ format, html, fileName }, parentWindow) {
   if (!html) throw new Error('没有可导出的内容')
 
-  const filePath = await chooseExportPath(format, fileName)
+  const filePath = await chooseExportPath(format, fileName, parentWindow)
   if (!filePath) return { canceled: true }
 
   if (format === 'html') {
@@ -717,7 +714,8 @@ async function chooseImagePath(
   defaultFolderPath,
   imageSavePath = 'images',
   imageName = `pasted-${getTimestamp()}.png`,
-  dialogTitle = '保存图片'
+  dialogTitle = '保存图片',
+  parentWindow
 ) {
   const markdownDir = markdownFilePath ? path.dirname(path.resolve(markdownFilePath)) : null
   const baseDir = markdownDir || (defaultFolderPath ? path.resolve(defaultFolderPath) : null)
@@ -745,7 +743,7 @@ async function chooseImagePath(
     }
   }
 
-  const result = await dialog.showSaveDialog(mainWindow, {
+  const result = await dialog.showSaveDialog(parentWindow, {
     title: dialogTitle,
     defaultPath: imageName,
     filters: [
@@ -909,7 +907,7 @@ async function saveImageBuffer({
   imageSavePath = 'images',
   syncSettings = null,
   dialogTitle = '保存图片'
-}) {
+}, parentWindow) {
   const remoteImage = await uploadImageToRemote(
     syncSettings,
     imageBuffer,
@@ -932,7 +930,8 @@ async function saveImageBuffer({
     defaultFolderPath,
     imageSavePath,
     imageName,
-    dialogTitle
+    dialogTitle,
+    parentWindow
   )
   if (!target) return { canceled: true }
 
@@ -954,7 +953,7 @@ async function saveClipboardImage({
   defaultFolderPath = null,
   imageSavePath = 'images',
   syncSettings = null
-}) {
+}, parentWindow) {
   const image = clipboard.readImage()
   if (image.isEmpty()) {
     return { canceled: true, reason: 'empty' }
@@ -970,7 +969,7 @@ async function saveClipboardImage({
     imageSavePath,
     syncSettings,
     dialogTitle: '保存剪贴板图片'
-  })
+  }, parentWindow)
 }
 
 async function saveImageFile({
@@ -981,7 +980,7 @@ async function saveImageFile({
   defaultFolderPath = null,
   imageSavePath = 'images',
   syncSettings = null
-}) {
+}, parentWindow) {
   const imageBuffer = toImageBuffer(imageData)
   if (!imageBuffer?.length) return { canceled: true, reason: 'empty' }
 
@@ -993,7 +992,7 @@ async function saveImageFile({
     defaultFolderPath,
     imageSavePath,
     syncSettings
-  })
+  }, parentWindow)
 }
 
 async function deleteInsertedImage(image, syncSettings) {
@@ -1064,16 +1063,17 @@ async function testSyncConnection({ provider, settings }) {
   throw new Error('不支持的同步类型')
 }
 
-ipcMain.handle('document:get-initial-file', async () => {
-  if (!initialFilePath) return null
+ipcMain.handle('document:get-initial-file', async (event) => {
+  const state = windowStates.get(BrowserWindow.fromWebContents(event.sender))
+  if (!state?.initialFilePath) return null
 
-  const filePath = initialFilePath
-  initialFilePath = null
+  const filePath = state.initialFilePath
+  state.initialFilePath = null
   return openMarkdownFile(filePath)
 })
 
-ipcMain.handle('document:open', (_event, filePath) => openMarkdownFile(filePath))
-ipcMain.handle('document:open-folder', () => openMarkdownFolder())
+ipcMain.handle('document:open', (event, filePath) => openMarkdownFile(filePath, BrowserWindow.fromWebContents(event.sender)))
+ipcMain.handle('document:open-folder', (event) => openMarkdownFolder(BrowserWindow.fromWebContents(event.sender)))
 ipcMain.handle('document:refresh-folder', (_event, folderPath) => refreshMarkdownFolder(folderPath))
 ipcMain.handle('document:create-in-folder', (_event, options) => createMarkdownFileInFolder(options))
 ipcMain.handle('document:create-folder-in-folder', (_event, options) => createFolderInFolder(options))
@@ -1082,16 +1082,16 @@ ipcMain.handle('document:move-folder-item', (_event, options) => moveFolderItem(
 ipcMain.handle('document:duplicate-folder-file', (_event, options) => duplicateMarkdownFile(options))
 ipcMain.handle('document:delete-folder-item', (_event, options) => deleteFolderItem(options))
 ipcMain.handle('document:show-folder-item', (_event, itemPath) => showFolderItem(itemPath))
-ipcMain.handle('document:create', (_event, folderPath) => createMarkdownFile(folderPath))
-ipcMain.handle('document:save', (_event, { filePath, content, defaultFolderPath }) =>
-  saveMarkdownFile(filePath, content, defaultFolderPath)
+ipcMain.handle('document:create', (event, folderPath) => createMarkdownFile(folderPath, BrowserWindow.fromWebContents(event.sender)))
+ipcMain.handle('document:save', (event, { filePath, content, defaultFolderPath }) =>
+  saveMarkdownFile(filePath, content, defaultFolderPath, BrowserWindow.fromWebContents(event.sender))
 )
-ipcMain.handle('document:save-as', (_event, { content, defaultFolderPath }) =>
-  saveMarkdownFileAs(content, defaultFolderPath)
+ipcMain.handle('document:save-as', (event, { content, defaultFolderPath }) =>
+  saveMarkdownFileAs(content, defaultFolderPath, BrowserWindow.fromWebContents(event.sender))
 )
-ipcMain.handle('document:export', (_event, options) => exportMarkdownDocument(options))
-ipcMain.handle('document:save-clipboard-image', (_event, options) => saveClipboardImage(options))
-ipcMain.handle('document:save-image-file', (_event, options) => saveImageFile(options))
+ipcMain.handle('document:export', (event, options) => exportMarkdownDocument(options, BrowserWindow.fromWebContents(event.sender)))
+ipcMain.handle('document:save-clipboard-image', (event, options) => saveClipboardImage(options, BrowserWindow.fromWebContents(event.sender)))
+ipcMain.handle('document:save-image-file', (event, options) => saveImageFile(options, BrowserWindow.fromWebContents(event.sender)))
 ipcMain.handle('document:delete-inserted-images', (_event, options) => deleteInsertedImages(options))
 ipcMain.handle('clipboard:copy-text', (_event, text) => copyTextToClipboard(text))
 ipcMain.handle('clipboard:copy-image', (_event, source) => copyImageToClipboard(source))
@@ -1101,8 +1101,8 @@ ipcMain.handle('document:asset-url', (_event, { markdownFilePath, source, syncSe
   resolveImageAssetUrl(markdownFilePath, source, syncSettings)
 )
 
-ipcMain.handle('dialog:choose-folder', async (_event, title = '选择文件夹') => {
-  const result = await dialog.showOpenDialog(mainWindow, {
+ipcMain.handle('dialog:choose-folder', async (event, title = '选择文件夹') => {
+  const result = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
     title,
     properties: ['openDirectory', 'createDirectory']
   })
@@ -1115,19 +1115,24 @@ ipcMain.handle('dialog:choose-folder', async (_event, title = '选择文件夹')
   }
 })
 
-ipcMain.handle('window:set-title', (_event, title) => {
-  if (mainWindow) mainWindow.setTitle(title || 'MdPreview')
+ipcMain.handle('window:create', () => {
+  createWindow()
+  return { ok: true }
 })
 
-ipcMain.handle('window:set-document-edited', (_event, edited) => {
-  if (mainWindow) mainWindow.setDocumentEdited(Boolean(edited))
+ipcMain.handle('window:set-title', (event, title) => {
+  BrowserWindow.fromWebContents(event.sender)?.setTitle(title || 'MdPreview')
 })
 
-ipcMain.handle('window:force-close', () => {
-  if (!mainWindow) return
-  isForceClosing = true
-  mainWindow.setDocumentEdited(false)
-  mainWindow.destroy()
+ipcMain.handle('window:set-document-edited', (event, edited) => {
+  BrowserWindow.fromWebContents(event.sender)?.setDocumentEdited(Boolean(edited))
+})
+
+ipcMain.handle('window:force-close', (event) => {
+  const window = BrowserWindow.fromWebContents(event.sender)
+  if (!window) return
+  window.setDocumentEdited(false)
+  window.destroy()
 })
 
 function getServerSessionPath() {
@@ -1162,25 +1167,25 @@ if (!gotLock) {
   app.quit()
 } else {
   app.on('second-instance', (_event, argv) => {
-    queueSystemFileOpen(getFileFromArgv(argv))
+    const filePath = getFileFromArgv(argv)
+    if (filePath) queueSystemFileOpen(filePath)
+    else app.whenReady().then(() => createWindow())
+  })
 
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore()
-      mainWindow.focus()
-    }
+  app.on('open-file', (event, filePath) => {
+    event.preventDefault()
+    queueSystemFileOpen(filePath)
   })
 
   app.whenReady().then(() => {
-    initialFilePath = getFileFromArgv(process.argv)
-    createWindow()
-
-    app.on('open-file', (event, filePath) => {
-      event.preventDefault()
-      queueSystemFileOpen(filePath)
-    })
+    const startupFile = getFileFromArgv(process.argv)
+    const files = [...new Set([startupFile && normalizeFilePathArg(startupFile), ...pendingFilePaths].filter(Boolean))]
+    pendingFilePaths.length = 0
+    if (files.length) files.forEach((filePath) => createWindow(filePath))
+    else createWindow()
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+      if (windowStates.size === 0) createWindow()
     })
   })
 

@@ -4,6 +4,7 @@ import { query } from './db.js'
 import { authRequired } from './auth.js'
 import { deleteDocumentFile, readDocument, writeDocument } from './storage.js'
 import { queueDocumentEmbedding } from './embedding.js'
+import { moveDocument } from './documentMoves.js'
 
 const supportedProtocolVersions = ['2025-06-18', '2025-03-26', '2024-11-05']
 
@@ -37,6 +38,15 @@ const tools = [
       type: 'object',
       properties: { id: { type: 'string' }, content: { type: 'string' }, title: { type: 'string' }, version: { type: 'integer' } },
       required: ['id', 'content']
+    }
+  },
+  {
+    name: 'move_document',
+    description: '移动当前用户的笔记，可同时重命名。relativePath 为包含文件名的目标相对路径，例如 归档/部署说明.md；移到根目录时只传文件名。目标同名文件不会被覆盖。',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string' }, relativePath: { type: 'string' } },
+      required: ['id', 'relativePath']
     }
   },
   {
@@ -132,6 +142,10 @@ async function callTool(name, args, userId) {
     )
     queueDocumentEmbedding(document.id)
     return jsonResult(updated.rows[0])
+  }
+
+  if (name === 'move_document') {
+    return jsonResult(await moveDocument(userId, input.id, input.relativePath))
   }
 
   if (name === 'delete_document') {

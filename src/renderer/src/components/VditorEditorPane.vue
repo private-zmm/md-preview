@@ -23,10 +23,6 @@ const props = defineProps({
     type: Object,
     default: null
   },
-  outline: {
-    type: Array,
-    default: () => []
-  },
   theme: {
     type: String,
     default: 'classic'
@@ -49,7 +45,6 @@ const tableMenu = ref({
   isHeader: false,
   isSingleColumn: false
 })
-const outlineVisible = ref(false)
 let editor = null
 let isEditorReady = false
 let isApplyingExternalValue = false
@@ -373,18 +368,6 @@ function handleTableMenuKeydown(event) {
   if (event.key === 'Escape') closeTableMenu()
 }
 
-function closeOutline() {
-  outlineVisible.value = false
-}
-
-function toggleOutline() {
-  outlineVisible.value = !outlineVisible.value
-}
-
-function selectOutline(item) {
-  scrollToOutline(item)
-}
-
 function runCommand(command) {
   const commandMap = {
     paragraph: () => editor?.insertValue('\n'),
@@ -542,7 +525,6 @@ onMounted(() => {
       rootRef.value?.addEventListener('keyup', syncActiveCodeBlock, true)
       rootRef.value?.addEventListener('input', syncActiveCodeBlock, true)
       window.addEventListener('pointerdown', closeTableMenu)
-      window.addEventListener('pointerdown', closeOutline)
       window.addEventListener('pointerdown', clearActiveCodeBlock, true)
       window.addEventListener('keydown', handleTableMenuKeydown)
       scheduleResolvePreviewImages()
@@ -557,7 +539,6 @@ onBeforeUnmount(() => {
   rootRef.value?.removeEventListener('keyup', syncActiveCodeBlock, true)
   rootRef.value?.removeEventListener('input', syncActiveCodeBlock, true)
   window.removeEventListener('pointerdown', closeTableMenu)
-  window.removeEventListener('pointerdown', closeOutline)
   window.removeEventListener('pointerdown', clearActiveCodeBlock, true)
   window.removeEventListener('keydown', handleTableMenuKeydown)
   editor?.destroy()
@@ -597,24 +578,6 @@ defineExpose({
 
 <template>
   <div class="pane editor-pane vditor-editor-pane">
-    <div v-if="outline.length" class="editor-outline-float" @pointerdown.stop>
-      <button class="editor-outline-toggle" type="button" :aria-expanded="outlineVisible" @click="toggleOutline">
-        <span class="editor-outline-toggle-icon" aria-hidden="true">☷</span>
-        <span>大纲</span>
-      </button>
-      <nav v-if="outlineVisible" class="editor-outline-panel" aria-label="文档大纲">
-        <button
-          v-for="item in outline"
-          :key="item.id"
-          class="editor-outline-item"
-          :class="`level-${item.level}`"
-          type="button"
-          @click="selectOutline(item)"
-        >
-          {{ item.title }}
-        </button>
-      </nav>
-    </div>
     <div ref="rootRef" class="vditor-editor"></div>
     <input
       ref="imageInputRef"

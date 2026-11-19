@@ -235,6 +235,7 @@ async function exportMarkdownDocument({ format, fileName, html }) {
 
 function createWebApi() {
   return {
+    createWindow: () => { window.open(window.location.href, '_blank', 'noopener') },
     getInitialFile: async () => ({ canceled: true }),
     createMarkdownFile,
     openMarkdownFile,

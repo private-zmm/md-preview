@@ -303,7 +303,8 @@ button {
   top: calc(100% + 5px);
   left: 0;
   z-index: 24;
-  width: 188px;
+  width: 280px;
+  max-width: calc(100vw - 24px);
   padding: 5px 0;
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   border-radius: 8px;
@@ -355,6 +356,13 @@ button {
   color: var(--muted);
   font-size: 12px;
   letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.file-popover .file-menu-item {
+  height: 32px;
+  padding: 0 12px;
+  gap: 24px;
   white-space: nowrap;
 }
 
@@ -865,30 +873,24 @@ button {
   white-space: nowrap;
 }
 
-.editor-outline-float {
-  position: absolute;
-  top: 14px;
-  right: 18px;
+.statusbar-outline {
+  position: relative;
   z-index: 24;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  pointer-events: auto;
+  align-items: center;
 }
 
 .editor-outline-toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 32px;
-  padding: 0 11px;
-  border: 1px solid color-mix(in srgb, var(--border-strong) 76%, var(--border));
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--control-active) 88%, transparent);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  min-height: 22px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: transparent;
   color: var(--muted);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .editor-outline-toggle:hover,
@@ -904,9 +906,12 @@ button {
 }
 
 .editor-outline-panel {
+  position: fixed;
+  top: 50%;
+  right: 18px;
+  transform: translateY(-50%);
   width: min(280px, calc(100vw - 48px));
   max-height: min(62vh, 520px);
-  margin-top: 6px;
   padding: 6px 0;
   overflow: auto;
   border: 1px solid color-mix(in srgb, var(--border-strong) 72%, var(--border));
@@ -1394,6 +1399,21 @@ button {
   background: var(--bar-bg);
   color: var(--soft);
   font-size: 12px;
+}
+
+.statusbar-message {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusbar-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
 }
 
 .dialog-backdrop {

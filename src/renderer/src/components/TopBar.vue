@@ -18,8 +18,10 @@ defineProps({
 
 const emit = defineEmits([
   'create',
+  'new-window',
   'open',
   'open-folder',
+  'open-server-folder',
   'upload-folder',
   'save',
   'save-as',
@@ -69,8 +71,10 @@ onUnmounted(() => {
         @toggle-menu="toggleMenu('file')"
         @close-menu="closeMenus"
         @create="emit('create')"
+        @new-window="emit('new-window')"
         @open="emit('open')"
         @open-folder="emit('open-folder')"
+        @open-server-folder="emit('open-server-folder')"
         @upload-folder="emit('upload-folder')"
         @save="emit('save')"
         @save-as="emit('save-as')"
